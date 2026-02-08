@@ -31,3 +31,6 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Config locale (données sensibles, jamais dans le repo) ###
+src/main/resources/application-local.yaml
