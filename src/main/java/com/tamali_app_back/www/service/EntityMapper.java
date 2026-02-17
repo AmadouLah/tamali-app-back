@@ -36,7 +36,9 @@ public class EntityMapper {
         return new UserDto(
                 e.getId(), e.getFirstname(), e.getLastname(), e.getEmail(), e.isEnabled(),
                 e.getBusiness() != null ? e.getBusiness().getId() : null,
-                e.getRoles() != null ? e.getRoles().stream().map(this::toDto).collect(Collectors.toSet()) : null,
+                e.getRoles() != null && !e.getRoles().isEmpty() 
+                    ? e.getRoles().stream().map(this::toDto).collect(Collectors.toSet()) 
+                    : java.util.Set.of(),
                 e.isMustChangePassword()
         );
     }

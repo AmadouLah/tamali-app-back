@@ -24,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.security.SecureRandom;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -58,9 +59,54 @@ public class UserService {
         return userRepository.findById(id).map(mapper::toDto).orElse(null);
     }
 
+    /**
+     * Récupère tous les utilisateurs avec le rôle BUSINESS_OWNER.
+     */
+    @Transactional(readOnly = true)
+    public List<UserDto> findAllBusinessOwners() {
+        Role businessOwnerRole = roleRepository.findByType(RoleType.BUSINESS_OWNER)
+                .orElseThrow(() -> new IllegalStateException("Rôle BUSINESS_OWNER introuvable."));
+        
+        Query nativeQuery = entityManager.createNativeQuery(
+            "SELECT DISTINCT u.id, u.firstname, u.lastname, u.email, u.enabled, u.business_id, " +
+            "u.must_change_password, u.created_at, u.updated_at, u.version, u.deleted_at " +
+            "FROM users u " +
+            "JOIN user_roles ur ON ur.user_id = u.id " +
+            "WHERE ur.role_id = :roleId AND u.deleted_at IS NULL " +
+            "ORDER BY u.created_at DESC"
+        );
+        nativeQuery.setParameter("roleId", businessOwnerRole.getId());
+        
+        @SuppressWarnings("unchecked")
+        List<Object[]> results = nativeQuery.getResultList();
+        
+        return results.stream()
+                .map(result -> {
+                    UUID userId = (UUID) result[0];
+                    Set<Role> roles = loadValidRoles(userId);
+                    User user = User.builder()
+                            .id(userId)
+                            .firstname((String) result[1])
+                            .lastname((String) result[2])
+                            .email((String) result[3])
+                            .enabled((Boolean) result[4])
+                            .mustChangePassword(result[6] != null && ((Boolean) result[6]))
+                            .build();
+                    user.setRoles(roles);
+                    return mapper.toDto(user);
+                })
+                .collect(Collectors.toList());
+    }
+
     @Transactional
     public UserDto create(String firstname, String lastname, String email, String password, UUID businessId, Set<RoleType> roleTypes) {
-        if (userRepository.existsByEmail(email)) return null;
+        String trimmedEmail = email.trim();
+        
+        // Supprimer définitivement les utilisateurs supprimés avec cet email pour permettre la réutilisation
+        deleteSoftDeletedUserByEmail(trimmedEmail);
+        
+        if (userRepository.existsByEmail(trimmedEmail)) return null;
+        
         Business business = businessId != null ? businessRepository.findById(businessId).orElse(null) : null;
         Set<Role> roles = roleTypes != null && !roleTypes.isEmpty()
                 ? roleTypes.stream()
@@ -70,7 +116,7 @@ public class UserService {
         User u = User.builder()
                 .firstname(firstname)
                 .lastname(lastname)
-                .email(email)
+                .email(trimmedEmail)
                 .password(passwordEncoder.encode(password))
                 .enabled(false)
                 .business(business)
@@ -82,13 +128,152 @@ public class UserService {
     /**
      * Crée un propriétaire d'entreprise avec juste l'email.
      * Génère un mot de passe temporaire de 10 caractères et l'envoie par email.
+     * Si l'utilisateur existe déjà mais n'a pas encore changé son mot de passe temporaire, génère un nouveau mot de passe.
+     * Si une violation de contrainte se produit (utilisateur existant), retourne l'utilisateur existant au lieu de lever une erreur.
      */
-    @Transactional
+    @Transactional(noRollbackFor = org.springframework.dao.DataIntegrityViolationException.class)
     public UserDto createBusinessOwnerWithEmail(String email) {
-        if (userRepository.existsByEmail(email)) {
-            throw new BadRequestException("Un compte existe déjà avec cet email.");
+        entityManager.clear();
+        entityManager.flush(); // S'assurer que toutes les modifications précédentes sont flushées
+        
+        String trimmedEmail = email.trim();
+        log.debug("Tentative de création de propriétaire d'entreprise avec email: {}", trimmedEmail);
+        
+        // Supprimer définitivement les utilisateurs supprimés avec cet email pour permettre la réutilisation
+        deleteSoftDeletedUserByEmail(trimmedEmail);
+        
+        // Vérifier maintenant si un utilisateur actif existe avec cet email
+        // Utiliser une requête native pour éviter les problèmes de cache Hibernate
+        UUID foundUserId = null;
+        try {
+            Query checkUserQuery = entityManager.createNativeQuery(
+                "SELECT id FROM users WHERE UPPER(email) = UPPER(:email) AND deleted_at IS NULL LIMIT 1"
+            );
+            checkUserQuery.setParameter("email", trimmedEmail);
+            // Forcer l'exécution immédiate de la requête
+            @SuppressWarnings("unchecked")
+            List<Object> results = checkUserQuery.getResultList();
+            if (!results.isEmpty() && results.get(0) != null) {
+                foundUserId = (UUID) results.get(0);
+                log.debug("Utilisateur existant trouvé avec l'email: {} (ID: {})", trimmedEmail, foundUserId);
+            }
+        } catch (Exception e) {
+            log.warn("Erreur lors de la vérification de l'email {}: {}", trimmedEmail, e.getMessage());
+            // En cas d'erreur, on continue pour éviter de bloquer la création
+        }
+        
+        // Si un utilisateur existe, le charger et gérer selon son état
+        if (foundUserId != null) {
+            final UUID existingUserId = foundUserId; // Variable finale pour utilisation dans le bloc
+            User existingUser = loadUserByIdWithoutInvalidRoles(existingUserId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Utilisateur", existingUserId));
+            // Si l'utilisateur existe déjà et doit changer son mot de passe temporaire, régénérer le mot de passe
+            if (existingUser.isMustChangePassword()) {
+                log.info("Utilisateur {} existe déjà avec mustChangePassword=true, régénération du mot de passe temporaire", trimmedEmail);
+                
+                String temporaryPassword = generateTemporaryPassword();
+                String encodedPassword = passwordEncoder.encode(temporaryPassword);
+                
+                // Mettre à jour le mot de passe via requête native
+                Query updateQuery = entityManager.createNativeQuery(
+                    "UPDATE users SET password = :password, updated_at = :updatedAt " +
+                    "WHERE id = :userId AND deleted_at IS NULL"
+                );
+                updateQuery.setParameter("password", encodedPassword);
+                updateQuery.setParameter("updatedAt", Timestamp.valueOf(LocalDateTime.now()));
+                updateQuery.setParameter("userId", existingUser.getId());
+                int updated = updateQuery.executeUpdate();
+                
+                if (updated == 0) {
+                    throw new ResourceNotFoundException("Utilisateur", existingUser.getId());
+                }
+                
+                // Envoyer l'email avec le mot de passe temporaire
+                sendTemporaryPasswordEmail(trimmedEmail, temporaryPassword);
+                
+                log.info("Mot de passe temporaire régénéré pour l'utilisateur: {}", trimmedEmail);
+                return mapper.toDto(existingUser);
+            } else {
+                // L'utilisateur existe et a déjà changé son mot de passe
+                // Vérifier s'il a déjà le rôle BUSINESS_OWNER
+                boolean hasBusinessOwnerRole = existingUser.getRoles().stream()
+                        .anyMatch(role -> role.getType() == RoleType.BUSINESS_OWNER);
+                
+                if (hasBusinessOwnerRole) {
+                    // L'utilisateur a déjà le rôle BUSINESS_OWNER, retourner l'utilisateur existant (idempotent)
+                    log.info("Utilisateur {} existe déjà avec le rôle BUSINESS_OWNER, retour de l'utilisateur existant", trimmedEmail);
+                    return mapper.toDto(existingUser);
+                } else {
+                    // L'utilisateur existe mais n'a pas le rôle BUSINESS_OWNER, lui ajouter ce rôle
+                    // et générer un nouveau mot de passe temporaire pour qu'il puisse se connecter
+                    log.info("Utilisateur {} existe déjà sans le rôle BUSINESS_OWNER, ajout du rôle et génération d'un mot de passe temporaire", trimmedEmail);
+                    
+                    Role businessOwnerRole = roleRepository.findByType(RoleType.BUSINESS_OWNER)
+                            .orElseThrow(() -> new IllegalStateException("Rôle BUSINESS_OWNER introuvable."));
+                    
+                    // Générer un nouveau mot de passe temporaire
+                    String temporaryPassword = generateTemporaryPassword();
+                    String encodedPassword = passwordEncoder.encode(temporaryPassword);
+                    
+                    // Ajouter le rôle et mettre à jour le mot de passe via requête native
+                    Query insertRoleQuery = entityManager.createNativeQuery(
+                        "INSERT INTO user_roles (user_id, role_id) " +
+                        "SELECT :userId, :roleId " +
+                        "WHERE NOT EXISTS (SELECT 1 FROM user_roles WHERE user_id = :userId AND role_id = :roleId)"
+                    );
+                    insertRoleQuery.setParameter("userId", existingUser.getId());
+                    insertRoleQuery.setParameter("roleId", businessOwnerRole.getId());
+                    insertRoleQuery.executeUpdate();
+                    
+                    // Mettre à jour le mot de passe et mustChangePassword
+                    Query updatePasswordQuery = entityManager.createNativeQuery(
+                        "UPDATE users SET password = :password, must_change_password = true, updated_at = :updatedAt " +
+                        "WHERE id = :userId AND deleted_at IS NULL"
+                    );
+                    updatePasswordQuery.setParameter("password", encodedPassword);
+                    updatePasswordQuery.setParameter("updatedAt", Timestamp.valueOf(LocalDateTime.now()));
+                    updatePasswordQuery.setParameter("userId", existingUser.getId());
+                    int updated = updatePasswordQuery.executeUpdate();
+                    
+                    if (updated == 0) {
+                        throw new ResourceNotFoundException("Utilisateur", existingUser.getId());
+                    }
+                    
+                    // Envoyer l'email avec le mot de passe temporaire
+                    sendTemporaryPasswordEmail(trimmedEmail, temporaryPassword);
+                    
+                    // Recharger l'utilisateur avec les nouveaux rôles
+                    entityManager.clear();
+                    User updatedUser = loadUserWithoutInvalidRoles(trimmedEmail);
+                    
+                    log.info("Rôle BUSINESS_OWNER ajouté et mot de passe temporaire envoyé à l'utilisateur: {}", trimmedEmail);
+                    return mapper.toDto(updatedUser);
+                }
+            }
         }
 
+        // Vérifier une dernière fois avant de créer pour éviter les doublons (race condition)
+        try {
+            Query finalCheckQuery = entityManager.createNativeQuery(
+                "SELECT id FROM users WHERE UPPER(email) = UPPER(:email) AND deleted_at IS NULL LIMIT 1"
+            );
+            finalCheckQuery.setParameter("email", trimmedEmail);
+            @SuppressWarnings("unchecked")
+            List<Object> finalResults = finalCheckQuery.getResultList();
+            if (!finalResults.isEmpty() && finalResults.get(0) != null) {
+                UUID finalCheck = (UUID) finalResults.get(0);
+                // L'utilisateur a été créé entre-temps, le charger et retourner
+                User raceConditionUser = loadUserByIdWithoutInvalidRoles(finalCheck)
+                        .orElseThrow(() -> new ResourceNotFoundException("Utilisateur", finalCheck));
+                log.info("Utilisateur {} créé entre-temps, retour de l'utilisateur existant", trimmedEmail);
+                return mapper.toDto(raceConditionUser);
+            }
+        } catch (Exception e) {
+            log.debug("Vérification finale avant création: aucun utilisateur trouvé pour {}", trimmedEmail);
+            // OK, l'utilisateur n'existe toujours pas, on peut créer
+        }
+
+        // Créer un nouvel utilisateur
         Role businessOwnerRole = roleRepository.findByType(RoleType.BUSINESS_OWNER)
                 .orElseThrow(() -> new IllegalStateException("Rôle BUSINESS_OWNER introuvable."));
 
@@ -96,7 +281,7 @@ public class UserService {
         String encodedPassword = passwordEncoder.encode(temporaryPassword);
 
         User user = User.builder()
-                .email(email.trim())
+                .email(trimmedEmail)
                 .password(encodedPassword)
                 .enabled(true)
                 .mustChangePassword(true)
@@ -104,17 +289,62 @@ public class UserService {
                 .roles(Set.of(businessOwnerRole))
                 .build();
 
-        user = userRepository.save(user);
-
-        String loginUrl = frontendUrl + "/auth/login";
         try {
-            mailService.sendTemporaryPassword(email, temporaryPassword, loginUrl);
-        } catch (Exception e) {
-            log.warn("Erreur lors de l'envoi de l'email avec le mot de passe temporaire à {}: {}", email, e.getMessage());
-            // Ne pas faire échouer la création si l'email échoue
+            user = userRepository.save(user);
+            entityManager.flush(); // Forcer le flush pour détecter immédiatement les violations de contrainte
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            // Violation de contrainte détectée - vérifier si c'est un utilisateur supprimé ou actif
+            log.warn("Violation de contrainte détectée pour {}, vérification de l'utilisateur existant", trimmedEmail);
+            entityManager.clear();
+            
+            // Vérifier si un utilisateur supprimé existe et le supprimer définitivement
+            if (deleteSoftDeletedUserByEmail(trimmedEmail)) {
+                // Réessayer de créer l'utilisateur après la suppression
+                try {
+                    user = userRepository.save(user);
+                    entityManager.flush();
+                    log.info("Utilisateur créé avec succès après suppression de l'utilisateur supprimé: {}", trimmedEmail);
+                    sendTemporaryPasswordEmail(trimmedEmail, temporaryPassword);
+                    return mapper.toDto(user);
+                } catch (org.springframework.dao.DataIntegrityViolationException retryException) {
+                    log.warn("Violation de contrainte persistante après suppression, chargement de l'utilisateur existant: {}", trimmedEmail);
+                    // Continuer pour charger l'utilisateur actif
+                }
+            }
+            
+            // Vérifier si un utilisateur actif existe (race condition)
+            Query reloadQuery = entityManager.createNativeQuery(
+                "SELECT id FROM users WHERE UPPER(email) = UPPER(:email) AND deleted_at IS NULL LIMIT 1"
+            );
+            reloadQuery.setParameter("email", trimmedEmail);
+            
+            UUID existingUserId = null;
+            try {
+                @SuppressWarnings("unchecked")
+                List<Object> reloadResults = reloadQuery.getResultList();
+                if (!reloadResults.isEmpty() && reloadResults.get(0) != null) {
+                    existingUserId = (UUID) reloadResults.get(0);
+                }
+            } catch (Exception ex) {
+                log.error("Erreur lors du rechargement de l'utilisateur avec email {}: {}", trimmedEmail, ex.getMessage());
+            }
+            
+            if (existingUserId == null) {
+                log.error("Utilisateur avec email {} existe selon la contrainte mais introuvable en base", trimmedEmail);
+                throw new BadRequestException("Un utilisateur avec cet email existe déjà mais n'a pas pu être chargé.");
+            }
+            
+            User existingUser = loadUserByIdWithoutInvalidRoles(existingUserId)
+                    .orElseThrow(() -> new BadRequestException("Un utilisateur avec cet email existe déjà."));
+            
+            log.info("Utilisateur existant {} retourné au lieu de créer un doublon", trimmedEmail);
+            return mapper.toDto(existingUser);
         }
 
-        log.info("Propriétaire d'entreprise créé avec email: {}", email);
+        // Envoyer l'email avec le mot de passe temporaire
+        sendTemporaryPasswordEmail(trimmedEmail, temporaryPassword);
+
+        log.info("Propriétaire d'entreprise créé avec email: {}", trimmedEmail);
         return mapper.toDto(user);
     }
 
@@ -123,8 +353,15 @@ public class UserService {
      */
     @Transactional
     public UserDto changeTemporaryPassword(UUID userId, String currentPassword, String newPassword) {
+        // Vider le cache pour s'assurer de charger les données fraîches depuis la base de données
+        entityManager.clear();
+        
         User user = loadUserByIdWithoutInvalidRoles(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Utilisateur", userId));
+
+        if (!user.isEnabled()) {
+            throw new BadRequestException("Le compte n'est pas activé.");
+        }
 
         if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
             throw new BadRequestException("Mot de passe actuel incorrect.");
@@ -152,8 +389,13 @@ public class UserService {
         user.setPassword(encodedNewPassword);
         user.setMustChangePassword(false);
 
-        log.info("Mot de passe temporaire changé pour l'utilisateur: {}", user.getEmail());
-        return mapper.toDto(user);
+        // Recharger l'utilisateur pour s'assurer que toutes les données sont à jour (rôles, business, etc.)
+        entityManager.clear();
+        User updatedUser = loadUserByIdWithoutInvalidRoles(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Utilisateur", userId));
+        
+        log.info("Mot de passe temporaire changé pour l'utilisateur: {}", updatedUser.getEmail());
+        return mapper.toDto(updatedUser);
     }
 
     /**
@@ -173,6 +415,139 @@ public class UserService {
         }
         
         return mapper.toDto(userRepository.save(user));
+    }
+
+    /**
+     * Désactive le compte d'un utilisateur (soft disable).
+     */
+    @Transactional
+    public UserDto disableAccount(UUID userId) {
+        return updateAccountStatus(userId, false);
+    }
+
+    /**
+     * Active le compte d'un utilisateur.
+     */
+    @Transactional
+    public UserDto enableAccount(UUID userId) {
+        return updateAccountStatus(userId, true);
+    }
+
+    /**
+     * Met à jour le statut d'activation d'un compte utilisateur.
+     * Méthode centralisée pour éviter la duplication de code.
+     */
+    private UserDto updateAccountStatus(UUID userId, boolean enabled) {
+        entityManager.clear();
+        User user = loadUserByIdWithoutInvalidRoles(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Utilisateur", userId));
+        
+        Query updateQuery = entityManager.createNativeQuery(
+            "UPDATE users SET enabled = :enabled, updated_at = :updatedAt " +
+            "WHERE id = :userId AND deleted_at IS NULL"
+        );
+        updateQuery.setParameter("enabled", enabled);
+        updateQuery.setParameter("updatedAt", Timestamp.valueOf(LocalDateTime.now()));
+        updateQuery.setParameter("userId", userId);
+        int updated = updateQuery.executeUpdate();
+        
+        if (updated == 0) {
+            throw new ResourceNotFoundException("Utilisateur", userId);
+        }
+        
+        user.setEnabled(enabled);
+        log.info("Compte {} pour l'utilisateur: {}", enabled ? "activé" : "désactivé", user.getEmail());
+        return mapper.toDto(user);
+    }
+
+    /**
+     * Supprime définitivement le compte d'un utilisateur de la base de données (hard delete).
+     * Fonctionne même si l'utilisateur est déjà soft deleted.
+     */
+    @Transactional
+    public void deleteAccount(UUID userId) {
+        entityManager.clear();
+        
+        // Vérifier si l'utilisateur existe (actif ou supprimé)
+        Query checkUserQuery = entityManager.createNativeQuery(
+            "SELECT email FROM users WHERE id = :userId LIMIT 1"
+        );
+        checkUserQuery.setParameter("userId", userId);
+        
+        String userEmail = null;
+        try {
+            Object result = checkUserQuery.getSingleResult();
+            if (result != null) {
+                userEmail = (String) result;
+            }
+        } catch (jakarta.persistence.NoResultException e) {
+            throw new ResourceNotFoundException("Utilisateur", userId);
+        }
+        
+        if (userEmail == null) {
+            throw new ResourceNotFoundException("Utilisateur", userId);
+        }
+        
+        // Supprimer d'abord les relations dans user_roles (même si l'utilisateur est soft deleted)
+        Query deleteRolesQuery = entityManager.createNativeQuery(
+            "DELETE FROM user_roles WHERE user_id = :userId"
+        );
+        deleteRolesQuery.setParameter("userId", userId);
+        deleteRolesQuery.executeUpdate();
+        
+        // Supprimer définitivement l'utilisateur de la base de données (même s'il est soft deleted)
+        Query deleteUserQuery = entityManager.createNativeQuery(
+            "DELETE FROM users WHERE id = :userId"
+        );
+        deleteUserQuery.setParameter("userId", userId);
+        int deleted = deleteUserQuery.executeUpdate();
+        
+        if (deleted == 0) {
+            throw new ResourceNotFoundException("Utilisateur", userId);
+        }
+        
+        log.info("Compte définitivement supprimé de la base de données pour l'utilisateur: {}", userEmail);
+    }
+
+    /**
+     * Supprime définitivement un utilisateur supprimé (soft delete) par son email.
+     * Méthode utilitaire pour éviter la duplication de code.
+     * Retourne true si un utilisateur supprimé a été trouvé et supprimé, false sinon.
+     */
+    private boolean deleteSoftDeletedUserByEmail(String email) {
+        Query checkDeletedQuery = entityManager.createNativeQuery(
+            "SELECT id FROM users WHERE UPPER(email) = UPPER(:email) AND deleted_at IS NOT NULL LIMIT 1"
+        );
+        checkDeletedQuery.setParameter("email", email);
+        
+        try {
+            @SuppressWarnings("unchecked")
+            List<Object> deletedResults = checkDeletedQuery.getResultList();
+            if (!deletedResults.isEmpty() && deletedResults.get(0) != null) {
+                UUID deletedUserId = (UUID) deletedResults.get(0);
+                log.info("Utilisateur supprimé trouvé, suppression définitive pour permettre la réutilisation de l'email: {}", email);
+                
+                // Supprimer définitivement les relations dans user_roles
+                Query deleteRolesQuery = entityManager.createNativeQuery(
+                    "DELETE FROM user_roles WHERE user_id = :userId"
+                );
+                deleteRolesQuery.setParameter("userId", deletedUserId);
+                deleteRolesQuery.executeUpdate();
+                
+                // Supprimer définitivement l'utilisateur
+                Query deleteUserQuery = entityManager.createNativeQuery(
+                    "DELETE FROM users WHERE id = :userId"
+                );
+                deleteUserQuery.setParameter("userId", deletedUserId);
+                deleteUserQuery.executeUpdate();
+                
+                entityManager.flush();
+                return true;
+            }
+        } catch (Exception e) {
+            log.debug("Aucun utilisateur supprimé trouvé pour: {}", email);
+        }
+        return false;
     }
 
     /**
@@ -245,6 +620,20 @@ public class UserService {
             password.append(chars.charAt(random.nextInt(chars.length())));
         }
         return password.toString();
+    }
+
+    /**
+     * Envoie un email avec le mot de passe temporaire à l'utilisateur.
+     * Méthode centralisée pour éviter la duplication de code.
+     */
+    private void sendTemporaryPasswordEmail(String email, String temporaryPassword) {
+        String loginUrl = frontendUrl + "/auth/login";
+        try {
+            mailService.sendTemporaryPassword(email, temporaryPassword, loginUrl);
+        } catch (Exception e) {
+            log.warn("Erreur lors de l'envoi de l'email avec le mot de passe temporaire à {}: {}", email, e.getMessage());
+            // Ne pas faire échouer l'opération si l'email échoue
+        }
     }
 
     @Transactional
@@ -476,7 +865,7 @@ public class UserService {
         try {
             Query nativeQuery = entityManager.createNativeQuery(
                 "SELECT id, firstname, lastname, email, password, enabled, business_id, " +
-                "verification_code, code_expiration, created_at, updated_at, version, deleted_at " +
+                "verification_code, code_expiration, must_change_password, created_at, updated_at, version, deleted_at " +
                 "FROM users WHERE UPPER(email) = UPPER(:email) AND deleted_at IS NULL LIMIT 1"
             );
             nativeQuery.setParameter("email", email);
@@ -494,6 +883,7 @@ public class UserService {
                     .enabled((Boolean) result[5])
                     .verificationCode((String) result[7])
                     .codeExpiration(convertToLocalDateTime(result[8]))
+                    .mustChangePassword(result[9] != null && ((Boolean) result[9]))
                     .build();
             
             // Charger seulement les rôles valides (sans corriger les invalides)
@@ -520,7 +910,7 @@ public class UserService {
             Query nativeQuery = entityManager.createNativeQuery(
                 "SELECT id, firstname, lastname, email, password, enabled, business_id, " +
                 "verification_code, code_expiration, last_code_sent_at, resend_attempts, " +
-                "created_at, updated_at, version, deleted_at " +
+                "must_change_password, created_at, updated_at, version, deleted_at " +
                 "FROM users WHERE UPPER(email) = UPPER(:email) AND deleted_at IS NULL LIMIT 1"
             );
             nativeQuery.setParameter("email", email);
@@ -540,6 +930,7 @@ public class UserService {
                     .codeExpiration(convertToLocalDateTime(result[8]))
                     .lastCodeSentAt(convertToLocalDateTime(result[9]))
                     .resendAttempts(result[10] != null ? ((Number) result[10]).intValue() : 0)
+                    .mustChangePassword(result[11] != null && ((Boolean) result[11]))
                     .build();
             
             // Charger seulement les rôles valides
@@ -563,13 +954,19 @@ public class UserService {
             Query nativeQuery = entityManager.createNativeQuery(
                 "SELECT id, firstname, lastname, email, password, enabled, business_id, " +
                 "verification_code, code_expiration, last_code_sent_at, resend_attempts, " +
-                "created_at, updated_at, version, deleted_at " +
+                "must_change_password, created_at, updated_at, version, deleted_at " +
                 "FROM users WHERE id = :userId AND deleted_at IS NULL LIMIT 1"
             );
             nativeQuery.setParameter("userId", userId);
             Object[] result = (Object[]) nativeQuery.getSingleResult();
             if (result == null) {
                 return java.util.Optional.empty();
+            }
+            
+            UUID businessId = result[6] != null ? (UUID) result[6] : null;
+            Business business = null;
+            if (businessId != null) {
+                business = businessRepository.findById(businessId).orElse(null);
             }
             
             User user = User.builder()
@@ -579,10 +976,12 @@ public class UserService {
                     .email((String) result[3])
                     .password((String) result[4])
                     .enabled((Boolean) result[5])
+                    .business(business)
                     .verificationCode((String) result[7])
                     .codeExpiration(convertToLocalDateTime(result[8]))
                     .lastCodeSentAt(convertToLocalDateTime(result[9]))
                     .resendAttempts(result[10] != null ? ((Number) result[10]).intValue() : 0)
+                    .mustChangePassword(result[11] != null && ((Boolean) result[11]))
                     .build();
             
             // Charger seulement les rôles valides

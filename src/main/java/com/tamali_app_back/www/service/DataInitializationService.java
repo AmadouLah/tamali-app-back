@@ -56,22 +56,21 @@ public class DataInitializationService implements CommandLineRunner {
                 new DefaultUser(
                         "amadoulandoure004@gmail.com",
                         "Admin@2024!",
-                        "Super",
-                        "Admin",
+                        "Amadou",
+                        "Landouré",
                         RoleType.SUPER_ADMIN,
-                        null)
-        );
+                        null));
 
         int created = 0;
         int updated = 0;
-        
+
         for (DefaultUser du : defaults) {
             try {
                 String email = du.email().trim();
-                
+
                 // Corriger d'abord les rôles invalides dans la base de données
                 fixInvalidRoles(email);
-                
+
                 // Charger l'utilisateur sans les rôles pour éviter les erreurs d'enum
                 User existing = null;
                 try {
@@ -82,19 +81,20 @@ public class DataInitializationService implements CommandLineRunner {
                 }
 
                 if (existing == null) {
-                    // Vérifier d'abord si l'utilisateur existe déjà (pour éviter l'erreur de clé dupliquée)
+                    // Vérifier d'abord si l'utilisateur existe déjà (pour éviter l'erreur de clé
+                    // dupliquée)
                     Query checkUserQuery = entityManager.createNativeQuery(
-                        "SELECT id FROM users WHERE UPPER(email) = UPPER(:email) AND deleted_at IS NULL LIMIT 1"
-                    );
+                            "SELECT id FROM users WHERE UPPER(email) = UPPER(:email) AND deleted_at IS NULL LIMIT 1");
                     checkUserQuery.setParameter("email", du.email());
                     UUID existingUserId = null;
                     try {
                         Object userIdObj = checkUserQuery.getSingleResult();
-                        existingUserId = userIdObj instanceof UUID ? (UUID) userIdObj : UUID.fromString(userIdObj.toString());
+                        existingUserId = userIdObj instanceof UUID ? (UUID) userIdObj
+                                : UUID.fromString(userIdObj.toString());
                     } catch (jakarta.persistence.NoResultException e) {
                         // L'utilisateur n'existe pas, on peut le créer
                     }
-                    
+
                     if (existingUserId != null) {
                         log.debug("Utilisateur {} existe déjà avec l'ID {}, rechargement...", email, existingUserId);
                         // Recharger l'utilisateur existant
@@ -109,19 +109,19 @@ public class DataInitializationService implements CommandLineRunner {
                             continue;
                         }
                     } else {
-                        // Créer l'utilisateur via requête native pour éviter le chargement EAGER des rôles
+                        // Créer l'utilisateur via requête native pour éviter le chargement EAGER des
+                        // rôles
                         UUID userId = UUID.randomUUID();
                         UUID roleId = roleRepository.findByType(du.roleType())
                                 .map(Role::getId)
                                 .orElseThrow(() -> new RuntimeException("Rôle " + du.roleType() + " introuvable"));
-                        
+
                         Query insertUserQuery = entityManager.createNativeQuery(
-                            "INSERT INTO users (id, firstname, lastname, email, password, enabled, " +
-                            "verification_code, code_expiration, last_code_sent_at, resend_attempts, " +
-                            "created_at, updated_at, version, deleted_at) " +
-                            "VALUES (:id, :firstname, :lastname, :email, :password, :enabled, " +
-                            "NULL, NULL, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0, NULL)"
-                        );
+                                "INSERT INTO users (id, firstname, lastname, email, password, enabled, " +
+                                        "verification_code, code_expiration, last_code_sent_at, resend_attempts, " +
+                                        "created_at, updated_at, version, deleted_at) " +
+                                        "VALUES (:id, :firstname, :lastname, :email, :password, :enabled, " +
+                                        "NULL, NULL, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 0, NULL)");
                         insertUserQuery.setParameter("id", userId);
                         insertUserQuery.setParameter("firstname", du.firstname());
                         insertUserQuery.setParameter("lastname", du.lastname());
@@ -129,16 +129,15 @@ public class DataInitializationService implements CommandLineRunner {
                         insertUserQuery.setParameter("password", passwordEncoder.encode(du.rawPassword()));
                         insertUserQuery.setParameter("enabled", true);
                         insertUserQuery.executeUpdate();
-                        
+
                         // Ajouter le rôle
                         Query insertRoleQuery = entityManager.createNativeQuery(
-                            "INSERT INTO user_roles (user_id, role_id) VALUES (:userId, :roleId) " +
-                            "ON CONFLICT DO NOTHING"
-                        );
+                                "INSERT INTO user_roles (user_id, role_id) VALUES (:userId, :roleId) " +
+                                        "ON CONFLICT DO NOTHING");
                         insertRoleQuery.setParameter("userId", userId);
                         insertRoleQuery.setParameter("roleId", roleId);
                         insertRoleQuery.executeUpdate();
-                        
+
                         entityManager.flush();
                         created++;
                         log.info("Utilisateur par défaut créé: email={}, role={}", email, du.roleType());
@@ -146,9 +145,10 @@ public class DataInitializationService implements CommandLineRunner {
                     }
                 }
                 boolean needUpdate = false;
-                
+
                 try {
-                    if (existing.getPassword() == null || !passwordEncoder.matches(du.rawPassword(), existing.getPassword())) {
+                    if (existing.getPassword() == null
+                            || !passwordEncoder.matches(du.rawPassword(), existing.getPassword())) {
                         existing.setPassword(passwordEncoder.encode(du.rawPassword()));
                         needUpdate = true;
                     }
@@ -157,12 +157,12 @@ public class DataInitializationService implements CommandLineRunner {
                     existing.setPassword(passwordEncoder.encode(du.rawPassword()));
                     needUpdate = true;
                 }
-                
+
                 if (!existing.isEnabled()) {
                     existing.setEnabled(true);
                     needUpdate = true;
                 }
-                
+
                 Role role = roleRepository.findByType(du.roleType()).orElse(null);
                 if (role != null) {
                     boolean hasCorrectRole = false;
@@ -173,7 +173,8 @@ public class DataInitializationService implements CommandLineRunner {
                                         try {
                                             return r != null && r.getType() == du.roleType();
                                         } catch (Exception e) {
-                                            log.warn("Rôle invalide ignoré pour l'utilisateur {}: {}", email, e.getMessage());
+                                            log.warn("Rôle invalide ignoré pour l'utilisateur {}: {}", email,
+                                                    e.getMessage());
                                             return false;
                                         }
                                     });
@@ -182,26 +183,25 @@ public class DataInitializationService implements CommandLineRunner {
                             hasCorrectRole = false;
                         }
                     }
-                    
+
                     if (!hasCorrectRole) {
-                        // Utiliser une requête native pour mettre à jour les rôles sans déclencher le chargement EAGER
+                        // Utiliser une requête native pour mettre à jour les rôles sans déclencher le
+                        // chargement EAGER
                         try {
                             // Supprimer tous les rôles existants pour cet utilisateur
                             Query deleteRolesQuery = entityManager.createNativeQuery(
-                                "DELETE FROM user_roles WHERE user_id = :userId"
-                            );
+                                    "DELETE FROM user_roles WHERE user_id = :userId");
                             deleteRolesQuery.setParameter("userId", existing.getId());
                             deleteRolesQuery.executeUpdate();
-                            
+
                             // Ajouter le bon rôle
                             Query insertRoleQuery = entityManager.createNativeQuery(
-                                "INSERT INTO user_roles (user_id, role_id) " +
-                                "SELECT :userId, r.id FROM roles r WHERE r.name = :roleName"
-                            );
+                                    "INSERT INTO user_roles (user_id, role_id) " +
+                                            "SELECT :userId, r.id FROM roles r WHERE r.name = :roleName");
                             insertRoleQuery.setParameter("userId", existing.getId());
                             insertRoleQuery.setParameter("roleName", du.roleType().name());
                             insertRoleQuery.executeUpdate();
-                            
+
                             entityManager.flush();
                             // Mettre à jour l'objet en mémoire
                             existing.setRoles(Set.of(role));
@@ -216,19 +216,21 @@ public class DataInitializationService implements CommandLineRunner {
                         }
                     }
                 }
-                
-                if (du.business() != null && (existing.getBusiness() == null || !existing.getBusiness().getId().equals(du.business().getId()))) {
+
+                if (du.business() != null && (existing.getBusiness() == null
+                        || !existing.getBusiness().getId().equals(du.business().getId()))) {
                     existing.setBusiness(du.business());
                     needUpdate = true;
                 }
 
                 if (needUpdate) {
-                    // Utiliser une requête native pour éviter le chargement EAGER des rôles invalides
+                    // Utiliser une requête native pour éviter le chargement EAGER des rôles
+                    // invalides
                     try {
                         Query updateQuery = entityManager.createNativeQuery(
-                            "UPDATE users SET password = :password, enabled = :enabled, updated_at = CURRENT_TIMESTAMP " +
-                            "WHERE id = :userId AND deleted_at IS NULL"
-                        );
+                                "UPDATE users SET password = :password, enabled = :enabled, updated_at = CURRENT_TIMESTAMP "
+                                        +
+                                        "WHERE id = :userId AND deleted_at IS NULL");
                         updateQuery.setParameter("password", existing.getPassword());
                         updateQuery.setParameter("enabled", existing.isEnabled());
                         updateQuery.setParameter("userId", existing.getId());
@@ -257,21 +259,20 @@ public class DataInitializationService implements CommandLineRunner {
         }
     }
 
-
     /**
      * Corrige les rôles invalides (ADMIN) en les supprimant de la table user_roles.
-     * Cette méthode est appelée depuis une méthode @Transactional, donc elle hérite de la transaction.
+     * Cette méthode est appelée depuis une méthode @Transactional, donc elle hérite
+     * de la transaction.
      */
     private void fixInvalidRoles(String email) {
         try {
             Query query = entityManager.createNativeQuery(
-                "DELETE FROM user_roles ur " +
-                "USING users u, roles r " +
-                "WHERE ur.user_id = u.id " +
-                "AND ur.role_id = r.id " +
-                "AND UPPER(u.email) = UPPER(:email) " +
-                "AND r.name NOT IN ('SUPER_ADMIN', 'BUSINESS_OWNER')"
-            );
+                    "DELETE FROM user_roles ur " +
+                            "USING users u, roles r " +
+                            "WHERE ur.user_id = u.id " +
+                            "AND ur.role_id = r.id " +
+                            "AND UPPER(u.email) = UPPER(:email) " +
+                            "AND r.name NOT IN ('SUPER_ADMIN', 'BUSINESS_OWNER')");
             query.setParameter("email", email);
             int deleted = query.executeUpdate();
             if (deleted > 0) {
@@ -285,22 +286,23 @@ public class DataInitializationService implements CommandLineRunner {
     }
 
     /**
-     * Charge un utilisateur sans charger les rôles invalides pour éviter les erreurs d'enum.
+     * Charge un utilisateur sans charger les rôles invalides pour éviter les
+     * erreurs d'enum.
      */
     private User loadUserWithoutInvalidRoles(String email) {
-        // Charger l'utilisateur via requête native pour éviter le chargement EAGER des rôles
+        // Charger l'utilisateur via requête native pour éviter le chargement EAGER des
+        // rôles
         try {
             Query nativeQuery = entityManager.createNativeQuery(
-                "SELECT id, firstname, lastname, email, password, enabled, business_id, " +
-                "verification_code, code_expiration, created_at, updated_at, version, deleted_at " +
-                "FROM users WHERE UPPER(email) = UPPER(:email) AND deleted_at IS NULL LIMIT 1"
-            );
+                    "SELECT id, firstname, lastname, email, password, enabled, business_id, " +
+                            "verification_code, code_expiration, created_at, updated_at, version, deleted_at " +
+                            "FROM users WHERE UPPER(email) = UPPER(:email) AND deleted_at IS NULL LIMIT 1");
             nativeQuery.setParameter("email", email);
             Object[] result = (Object[]) nativeQuery.getSingleResult();
             if (result == null) {
                 return null;
             }
-            
+
             User user = User.builder()
                     .id((UUID) result[0])
                     .firstname((String) result[1])
@@ -311,17 +313,16 @@ public class DataInitializationService implements CommandLineRunner {
                     .verificationCode((String) result[7])
                     .codeExpiration(convertToLocalDateTime(result[8]))
                     .build();
-            
+
             // Charger seulement les rôles valides
             Query rolesQuery = entityManager.createNativeQuery(
-                "SELECT r.id, r.name FROM roles r " +
-                "JOIN user_roles ur ON ur.role_id = r.id " +
-                "WHERE ur.user_id = :userId AND r.name IN ('SUPER_ADMIN', 'BUSINESS_OWNER')"
-            );
+                    "SELECT r.id, r.name FROM roles r " +
+                            "JOIN user_roles ur ON ur.role_id = r.id " +
+                            "WHERE ur.user_id = :userId AND r.name IN ('SUPER_ADMIN', 'BUSINESS_OWNER')");
             rolesQuery.setParameter("userId", user.getId());
             @SuppressWarnings("unchecked")
             List<Object[]> roleResults = rolesQuery.getResultList();
-            
+
             Set<Role> validRoles = roleResults.stream()
                     .map(row -> {
                         try {
@@ -336,7 +337,7 @@ public class DataInitializationService implements CommandLineRunner {
                     })
                     .filter(r -> r != null)
                     .collect(Collectors.toSet());
-            
+
             user.setRoles(validRoles);
             return user;
         } catch (jakarta.persistence.NoResultException e) {

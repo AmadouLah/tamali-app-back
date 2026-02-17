@@ -6,7 +6,6 @@ import com.tamali_app_back.www.dto.request.ConfirmCodeRequest;
 import com.tamali_app_back.www.dto.request.CreateBusinessOwnerRequest;
 import com.tamali_app_back.www.dto.request.UserCreateRequest;
 import com.tamali_app_back.www.exception.BadRequestException;
-import com.tamali_app_back.www.exception.ResourceNotFoundException;
 import com.tamali_app_back.www.service.UserService;
 import com.tamali_app_back.www.util.ResponseUtil;
 import jakarta.validation.Valid;
@@ -16,6 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -36,6 +36,14 @@ public class UserController {
     public ResponseEntity<UserDto> findByEmail(@RequestParam String email) {
         UserDto dto = ResponseUtil.requireFound(userService.findByEmail(email), "Utilisateur", email);
         return ResponseEntity.ok(dto);
+    }
+
+    /**
+     * Récupère tous les propriétaires d'entreprise.
+     */
+    @GetMapping("/business-owners")
+    public ResponseEntity<List<UserDto>> findAllBusinessOwners() {
+        return ResponseEntity.ok(userService.findAllBusinessOwners());
     }
 
     @PostMapping
@@ -100,5 +108,32 @@ public class UserController {
                 : null;
         UserDto dto = userService.updateBusiness(id, businessId);
         return ResponseEntity.ok(dto);
+    }
+
+    /**
+     * Désactive le compte d'un utilisateur.
+     */
+    @PatchMapping("/{id}/disable")
+    public ResponseEntity<UserDto> disableAccount(@PathVariable UUID id) {
+        UserDto dto = userService.disableAccount(id);
+        return ResponseEntity.ok(dto);
+    }
+
+    /**
+     * Active le compte d'un utilisateur.
+     */
+    @PatchMapping("/{id}/enable")
+    public ResponseEntity<UserDto> enableAccount(@PathVariable UUID id) {
+        UserDto dto = userService.enableAccount(id);
+        return ResponseEntity.ok(dto);
+    }
+
+    /**
+     * Supprime définitivement le compte d'un utilisateur.
+     */
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteAccount(@PathVariable UUID id) {
+        userService.deleteAccount(id);
+        return ResponseEntity.noContent().build();
     }
 }
