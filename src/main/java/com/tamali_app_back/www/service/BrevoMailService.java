@@ -16,7 +16,8 @@ import java.util.Map;
 public class BrevoMailService implements MailService {
 
     private static final String BREVO_URL = "https://api.brevo.com/v3/smtp/email";
-    private static final String SUBJECT = "Votre code de connexion — Tamali";
+    private static final String SUBJECT_CODE = "Votre code de connexion — Tamali";
+    private static final String SUBJECT_INVITATION = "Invitation à rejoindre Tamali";
 
     private final RestClient restClient;
     private final String fromEmail;
@@ -39,7 +40,7 @@ public class BrevoMailService implements MailService {
         Map<String, Object> body = Map.of(
                 "sender", Map.of("email", fromEmail, "name", fromName),
                 "to", List.of(Map.of("email", toEmail)),
-                "subject", SUBJECT,
+                "subject", SUBJECT_CODE,
                 "htmlContent", html
         );
         try {
@@ -53,6 +54,29 @@ public class BrevoMailService implements MailService {
         } catch (Exception e) {
             log.error("Échec envoi email Brevo vers {}: {}", toEmail, e.getMessage());
             throw new RuntimeException("Impossible d'envoyer l'email de vérification.", e);
+        }
+    }
+
+    @Override
+    public void sendInvitation(String toEmail, String invitationLink, int validityDays) {
+        String html = InvitationEmailTemplate.buildHtml(invitationLink, validityDays);
+        Map<String, Object> body = Map.of(
+                "sender", Map.of("email", fromEmail, "name", fromName),
+                "to", List.of(Map.of("email", toEmail)),
+                "subject", SUBJECT_INVITATION,
+                "htmlContent", html
+        );
+        try {
+            restClient.post()
+                    .uri(BREVO_URL)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(body)
+                    .retrieve()
+                    .toBodilessEntity();
+            log.debug("Invitation envoyée à {}", toEmail);
+        } catch (Exception e) {
+            log.error("Échec envoi invitation Brevo vers {}: {}", toEmail, e.getMessage());
+            throw new RuntimeException("Impossible d'envoyer l'email d'invitation.", e);
         }
     }
 }

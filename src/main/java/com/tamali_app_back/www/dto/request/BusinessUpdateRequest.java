@@ -5,5 +5,6 @@ public record BusinessUpdateRequest(
         String email,
         String phone,
         String address,
-        Boolean active
+        Boolean active,
+        String logoUrl
 ) {}

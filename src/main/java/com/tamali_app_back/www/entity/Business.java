@@ -47,6 +47,13 @@ public class Business extends SyncableEntity {
     @OneToOne(mappedBy = "business", cascade = CascadeType.ALL, orphanRemoval = true)
     private TaxConfiguration taxConfiguration;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "receipt_template_id")
+    private ReceiptTemplate receiptTemplate;
+
+    @Column(name = "logo_url")
+    private String logoUrl;
+
     @Builder.Default
     private boolean active = true;
 }

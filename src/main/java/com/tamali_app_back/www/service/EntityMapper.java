@@ -11,7 +11,9 @@ public class EntityMapper {
 
     public BusinessDto toDto(Business e) {
         if (e == null) return null;
-        return new BusinessDto(e.getId(), e.getName(), e.getEmail(), e.getPhone(), e.getAddress(), e.isActive(), e.getCreatedAt());
+        return new BusinessDto(e.getId(), e.getName(), e.getEmail(), e.getPhone(), e.getAddress(),
+                e.isActive(), e.getReceiptTemplate() != null ? e.getReceiptTemplate().getId() : null,
+                e.getLogoUrl(), e.getCreatedAt());
     }
 
     public RoleDto toDto(Role e) {
@@ -78,5 +80,16 @@ public class EntityMapper {
     public TaxConfigurationDto toDto(TaxConfiguration e) {
         if (e == null) return null;
         return new TaxConfigurationDto(e.getId(), e.getBusiness() != null ? e.getBusiness().getId() : null, e.isEnabled(), e.getRate());
+    }
+
+    public ReceiptTemplateDto toDto(ReceiptTemplate e) {
+        if (e == null) return null;
+        return new ReceiptTemplateDto(e.getId(), e.getCode(), e.getName(), e.getHtmlContent(),
+                e.getCssContent(), e.isDefault(), e.isActive(), e.getCreatedAt());
+    }
+
+    public InvitationDto toDto(Invitation e) {
+        if (e == null) return null;
+        return new InvitationDto(e.getId(), e.getEmail(), e.getExpiresAt(), e.isUsed(), e.getCreatedAt());
     }
 }

@@ -13,4 +13,9 @@ public class LogOnlyMailService implements MailService {
     public void sendVerificationCode(String toEmail, String code, int validityMinutes) {
         log.info("[MAIL] Code de vérification pour {} : {} (valide {} min)", toEmail, code, validityMinutes);
     }
+
+    @Override
+    public void sendInvitation(String toEmail, String invitationLink, int validityDays) {
+        log.info("[MAIL] Invitation pour {} : {} (valide {} jours)", toEmail, invitationLink, validityDays);
+    }
 }

@@ -4,7 +4,6 @@ import com.tamali_app_back.www.entity.Business;
 import com.tamali_app_back.www.entity.Role;
 import com.tamali_app_back.www.entity.User;
 import com.tamali_app_back.www.enums.RoleType;
-import com.tamali_app_back.www.repository.BusinessRepository;
 import com.tamali_app_back.www.repository.RoleRepository;
 import com.tamali_app_back.www.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -21,89 +20,38 @@ import java.util.Set;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-@Order(1)
+@Order(3)
 public class DataInitializationService implements CommandLineRunner {
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
-    private final BusinessRepository businessRepository;
     private final PasswordEncoder passwordEncoder;
 
     @Override
     public void run(String... args) {
         try {
-            log.info("Début de l'initialisation des données par défaut...");
+            log.info("Début de l'initialisation des utilisateurs par défaut...");
             Thread.sleep(500);
-            ensureRolesExist();
-            ensureDefaultBusinessExists();
             initializeDefaultUsers();
-            log.info("Initialisation des données par défaut terminée.");
+            log.info("Initialisation des utilisateurs par défaut terminée.");
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             log.error("Initialisation interrompue", e);
         } catch (Exception e) {
-            log.error("Erreur lors de l'initialisation des données par défaut", e);
+            log.error("Erreur lors de l'initialisation des utilisateurs par défaut", e);
         }
-    }
-
-    private void ensureRolesExist() {
-        for (RoleType rt : RoleType.values()) {
-            if (roleRepository.findByType(rt).isEmpty()) {
-                Role role = Role.builder().type(rt).build();
-                roleRepository.save(role);
-                log.info("Rôle créé: {}", rt);
-            }
-        }
-    }
-
-    private Business ensureDefaultBusinessExists() {
-        List<Business> all = businessRepository.findAll();
-        if (all.isEmpty()) {
-            Business b = Business.builder()
-                    .name("Tamali Demo")
-                    .email("demo@tamali.ml")
-                    .phone("+22300000000")
-                    .address("Bamako, Mali")
-                    .active(true)
-                    .build();
-            businessRepository.save(b);
-            log.info("Business par défaut créé: Tamali Demo");
-            return b;
-        }
-        return all.get(0);
     }
 
     private void initializeDefaultUsers() {
-        Business defaultBusiness = businessRepository.findAll().stream().findFirst().orElse(null);
         List<DefaultUser> defaults = Arrays.asList(
                 new DefaultUser(
                         "amadoulandoure004@gmail.com",
                         "Admin@2024!",
+                        "Super",
                         "Admin",
-                        "Amadou",
-                        RoleType.ADMIN,
-                        null),
-                new DefaultUser(
-                        "amadoulandoure89@gmail.com",
-                        "Owner@2024!",
-                        "Propriétaire",
-                        "Demo",
-                        RoleType.OWNER,
-                        defaultBusiness),
-                new DefaultUser(
-                        "landoureamadou89@gmail.com",
-                        "Manager@2024!",
-                        "Manager",
-                        "Demo",
-                        RoleType.MANAGER,
-                        defaultBusiness),
-                new DefaultUser(
-                        "cashier@tamali.ml",
-                        "Cashier@2024!",
-                        "Caissier",
-                        "Demo",
-                        RoleType.CASHIER,
-                        defaultBusiness));
+                        RoleType.SUPER_ADMIN,
+                        null)
+        );
 
         int created = 0;
         int updated = 0;

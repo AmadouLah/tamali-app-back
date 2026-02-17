@@ -2,6 +2,7 @@ package com.tamali_app_back.www.controller;
 
 import com.tamali_app_back.www.dto.BusinessDto;
 import com.tamali_app_back.www.dto.request.BusinessCreateRequest;
+import com.tamali_app_back.www.dto.request.BusinessUpdateReceiptTemplateRequest;
 import com.tamali_app_back.www.dto.request.BusinessUpdateRequest;
 import com.tamali_app_back.www.exception.ResourceNotFoundException;
 import com.tamali_app_back.www.service.BusinessService;
@@ -43,7 +44,7 @@ public class BusinessController {
     @PatchMapping("/{id}")
     public ResponseEntity<BusinessDto> update(@PathVariable UUID id, @RequestBody BusinessUpdateRequest request) {
         BusinessDto dto = ResponseUtil.requireFound(businessService.update(id,
-                request.name(), request.email(), request.phone(), request.address(), request.active()), "Business", id);
+                request.name(), request.email(), request.phone(), request.address(), request.active(), request.logoUrl()), "Business", id);
         return ResponseEntity.ok(dto);
     }
 
@@ -51,5 +52,14 @@ public class BusinessController {
     public ResponseEntity<Void> deleteById(@PathVariable UUID id) {
         businessService.deleteById(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/{id}/receipt-template")
+    public ResponseEntity<BusinessDto> updateReceiptTemplate(
+            @PathVariable UUID id,
+            @Valid @RequestBody BusinessUpdateReceiptTemplateRequest request) {
+        BusinessDto dto = ResponseUtil.requireFound(
+                businessService.updateReceiptTemplate(id, request.receiptTemplateId()), "Business", id);
+        return ResponseEntity.ok(dto);
     }
 }
