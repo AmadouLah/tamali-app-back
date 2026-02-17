@@ -1,7 +1,6 @@
 package com.tamali_app_back.www.service;
 
 import com.tamali_app_back.www.dto.InvoiceDto;
-import com.tamali_app_back.www.entity.Invoice;
 import com.tamali_app_back.www.repository.InvoiceRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

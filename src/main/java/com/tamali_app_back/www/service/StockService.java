@@ -1,7 +1,6 @@
 package com.tamali_app_back.www.service;
 
 import com.tamali_app_back.www.dto.StockDto;
-import com.tamali_app_back.www.entity.Stock;
 import com.tamali_app_back.www.repository.StockRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

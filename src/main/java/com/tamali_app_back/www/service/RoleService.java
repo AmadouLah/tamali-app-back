@@ -1,7 +1,6 @@
 package com.tamali_app_back.www.service;
 
 import com.tamali_app_back.www.dto.RoleDto;
-import com.tamali_app_back.www.entity.Role;
 import com.tamali_app_back.www.enums.RoleType;
 import com.tamali_app_back.www.repository.RoleRepository;
 import lombok.RequiredArgsConstructor;

@@ -3,6 +3,7 @@ package com.tamali_app_back.www.service;
 import com.tamali_app_back.www.dto.InvoiceDto;
 import com.tamali_app_back.www.dto.PaymentDto;
 import com.tamali_app_back.www.dto.SaleDto;
+import com.tamali_app_back.www.dto.request.SaleItemRequest;
 import com.tamali_app_back.www.entity.*;
 import com.tamali_app_back.www.enums.MovementType;
 import com.tamali_app_back.www.enums.PaymentMethod;
@@ -149,6 +150,4 @@ public class SaleService {
     public void markInvoiceSentByWhatsapp(UUID invoiceId) {
         invoiceService.markSentByWhatsapp(invoiceId);
     }
-
-    public record SaleItemRequest(UUID productId, int quantity) {}
 }

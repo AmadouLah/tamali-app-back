@@ -1,7 +1,6 @@
 package com.tamali_app_back.www.service;
 
 import com.tamali_app_back.www.dto.PaymentDto;
-import com.tamali_app_back.www.entity.Payment;
 import com.tamali_app_back.www.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

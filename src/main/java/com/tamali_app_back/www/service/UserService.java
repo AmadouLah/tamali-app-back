@@ -5,6 +5,7 @@ import com.tamali_app_back.www.entity.Business;
 import com.tamali_app_back.www.entity.Role;
 import com.tamali_app_back.www.entity.User;
 import com.tamali_app_back.www.enums.RoleType;
+import com.tamali_app_back.www.exception.ResourceNotFoundException;
 import com.tamali_app_back.www.repository.BusinessRepository;
 import com.tamali_app_back.www.repository.RoleRepository;
 import com.tamali_app_back.www.repository.UserRepository;
@@ -12,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Set;
 import java.util.UUID;
@@ -20,9 +22,12 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class UserService {
 
+    private static final int CODE_VALIDITY_MINUTES = 10;
+
     private final UserRepository userRepository;
     private final BusinessRepository businessRepository;
     private final RoleRepository roleRepository;
+    private final MailService mailService;
     private final EntityMapper mapper;
 
     @Transactional(readOnly = true)
@@ -74,5 +79,21 @@ public class UserService {
         u.setCodeExpiration(null);
         u.setEnabled(true);
         return mapper.toDto(userRepository.save(u));
+    }
+
+    /**
+     * Génère un code à 6 chiffres, le sauvegarde sur l'utilisateur et envoie l'email via Brevo (ou log).
+     */
+    @Transactional
+    public UserDto requestLoginCode(String email) {
+        User u = userRepository.findByEmailIgnoreCase(email.trim())
+                .orElseThrow(() -> new ResourceNotFoundException("Aucun compte avec cet email."));
+        String code = String.format("%06d", new SecureRandom().nextInt(1_000_000));
+        LocalDateTime exp = LocalDateTime.now().plusMinutes(CODE_VALIDITY_MINUTES);
+        u.setVerificationCode(code);
+        u.setCodeExpiration(exp);
+        userRepository.save(u);
+        mailService.sendVerificationCode(u.getEmail(), code, CODE_VALIDITY_MINUTES);
+        return mapper.toDto(u);
     }
 }
