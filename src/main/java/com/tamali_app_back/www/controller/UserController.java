@@ -97,7 +97,7 @@ public class UserController {
     }
 
     /**
-     * Met à jour un utilisateur (pour lier une entreprise par exemple).
+     * Met à jour un utilisateur (businessId, firstname, lastname).
      */
     @PatchMapping("/{id}")
     public ResponseEntity<UserDto> update(
@@ -106,7 +106,9 @@ public class UserController {
         UUID businessId = updates.containsKey("businessId") && updates.get("businessId") != null
                 ? UUID.fromString(updates.get("businessId").toString())
                 : null;
-        UserDto dto = userService.updateBusiness(id, businessId);
+        String firstname = updates.containsKey("firstname") ? (String) updates.get("firstname") : null;
+        String lastname = updates.containsKey("lastname") ? (String) updates.get("lastname") : null;
+        UserDto dto = userService.update(id, businessId, firstname, lastname);
         return ResponseEntity.ok(dto);
     }
 

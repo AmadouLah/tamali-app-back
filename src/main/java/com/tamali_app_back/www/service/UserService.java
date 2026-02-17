@@ -399,12 +399,11 @@ public class UserService {
     }
 
     /**
-     * Met à jour l'entreprise d'un utilisateur.
-     * Utilise une requête native pour éviter les conflits d'optimistic locking
-     * (l'entité User chargée manuellement n'a pas la version correcte).
+     * Met à jour un utilisateur (businessId, firstname, lastname).
+     * Utilise une requête native pour éviter les conflits d'optimistic locking.
      */
     @Transactional
-    public UserDto updateBusiness(UUID userId, UUID businessId) {
+    public UserDto update(UUID userId, UUID businessId, String firstname, String lastname) {
         if (businessId != null) {
             businessRepository.findById(businessId)
                     .orElseThrow(() -> new ResourceNotFoundException("Entreprise", businessId));
@@ -413,13 +412,20 @@ public class UserService {
             throw new ResourceNotFoundException("Utilisateur", userId);
         }
 
-        Query updateQuery = entityManager.createNativeQuery(
-            "UPDATE users SET business_id = :businessId, updated_at = :updatedAt, version = version + 1 " +
-            "WHERE id = :userId AND deleted_at IS NULL"
-        );
-        updateQuery.setParameter("businessId", businessId);
+        StringBuilder sql = new StringBuilder("UPDATE users SET updated_at = :updatedAt, version = version + 1");
+        if (businessId != null || (firstname != null || lastname != null)) {
+            if (businessId != null) sql.append(", business_id = :businessId");
+            if (firstname != null) sql.append(", firstname = :firstname");
+            if (lastname != null) sql.append(", lastname = :lastname");
+        }
+        sql.append(" WHERE id = :userId AND deleted_at IS NULL");
+
+        Query updateQuery = entityManager.createNativeQuery(sql.toString());
         updateQuery.setParameter("updatedAt", Timestamp.valueOf(LocalDateTime.now()));
         updateQuery.setParameter("userId", userId);
+        if (businessId != null) updateQuery.setParameter("businessId", businessId);
+        if (firstname != null) updateQuery.setParameter("firstname", firstname.trim());
+        if (lastname != null) updateQuery.setParameter("lastname", lastname.trim());
         int updated = updateQuery.executeUpdate();
 
         if (updated == 0) {
@@ -429,6 +435,13 @@ public class UserService {
         return loadUserByIdWithoutInvalidRoles(userId)
                 .map(mapper::toDto)
                 .orElseThrow(() -> new ResourceNotFoundException("Utilisateur", userId));
+    }
+
+    /**
+     * Met à jour l'entreprise d'un utilisateur (rétrocompatibilité).
+     */
+    public UserDto updateBusiness(UUID userId, UUID businessId) {
+        return update(userId, businessId, null, null);
     }
 
     /**
