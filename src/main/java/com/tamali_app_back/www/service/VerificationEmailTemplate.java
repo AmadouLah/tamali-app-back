@@ -14,7 +14,9 @@ public final class VerificationEmailTemplate {
      * Construit le HTML de l'email avec le code à 6 chiffres.
      */
     public static String buildHtml(String code, int validityMinutes) {
-        return """
+        String escapedCode = escapeHtml(code != null ? code : "");
+        
+        String template = """
             <!DOCTYPE html>
             <html>
             <head>
@@ -28,13 +30,25 @@ public final class VerificationEmailTemplate {
                   <td style="padding:40px 32px; text-align:center;">
                     <p style="margin:0 0 8px; font-size:14px; color:#64748b;">Votre code de connexion</p>
                     <p style="margin:0 0 24px; font-size:24px; font-weight:600; color:#0f172a;">Tamali</p>
-                    <p style="margin:0 0 20px; font-size:32px; font-weight:700; letter-spacing:8px; color:#0f172a;">%s</p>
-                    <p style="margin:0; font-size:13px; color:#94a3b8;">Valide %d minutes. Ne partagez ce code avec personne.</p>
+                    <p style="margin:0 0 20px; font-size:32px; font-weight:700; letter-spacing:8px; color:#0f172a;">CODE_PLACEHOLDER</p>
+                    <p style="margin:0; font-size:13px; color:#94a3b8;">Valide MINUTES_PLACEHOLDER minutes. Ne partagez ce code avec personne.</p>
                   </td>
                 </tr>
               </table>
             </body>
             </html>
-            """.formatted(code, validityMinutes);
+            """;
+        
+        return template.replace("CODE_PLACEHOLDER", escapedCode)
+                      .replace("MINUTES_PLACEHOLDER", String.valueOf(validityMinutes));
+    }
+    
+    private static String escapeHtml(String text) {
+        if (text == null) return "";
+        return text.replace("&", "&amp;")
+                  .replace("<", "&lt;")
+                  .replace(">", "&gt;")
+                  .replace("\"", "&quot;")
+                  .replace("'", "&#39;");
     }
 }

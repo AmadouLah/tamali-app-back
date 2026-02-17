@@ -47,4 +47,10 @@ public class User extends SyncableEntity {
 
     private String verificationCode;
     private LocalDateTime codeExpiration;
+    
+    @Column(name = "last_code_sent_at")
+    private LocalDateTime lastCodeSentAt;
+    
+    @Column(name = "resend_attempts")
+    private Integer resendAttempts = 0;
 }

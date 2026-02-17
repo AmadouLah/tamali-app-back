@@ -20,4 +20,12 @@ public interface MailService {
      * @param validityDays durée de validité du lien (affichée dans l'email)
      */
     void sendInvitation(String toEmail, String invitationLink, int validityDays);
+
+    /**
+     * Envoie une demande d'utilisation du service au SUPER_ADMIN.
+     * @param requesterEmail email de la personne qui fait la demande
+     * @param objective objectif/raison de la demande
+     * @param adminEmail email du destinataire (SUPER_ADMIN)
+     */
+    void sendServiceRequest(String requesterEmail, String objective, String adminEmail);
 }

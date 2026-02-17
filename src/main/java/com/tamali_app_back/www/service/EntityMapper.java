@@ -92,4 +92,9 @@ public class EntityMapper {
         if (e == null) return null;
         return new InvitationDto(e.getId(), e.getEmail(), e.getExpiresAt(), e.isUsed(), e.getCreatedAt());
     }
+
+    public ServiceRequestDto toDto(ServiceRequest e) {
+        if (e == null) return null;
+        return new ServiceRequestDto(e.getId(), e.getEmail(), e.getObjective(), e.isProcessed(), e.getCreatedAt());
+    }
 }

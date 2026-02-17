@@ -18,4 +18,9 @@ public class LogOnlyMailService implements MailService {
     public void sendInvitation(String toEmail, String invitationLink, int validityDays) {
         log.info("[MAIL] Invitation pour {} : {} (valide {} jours)", toEmail, invitationLink, validityDays);
     }
+
+    @Override
+    public void sendServiceRequest(String requesterEmail, String objective, String adminEmail) {
+        log.info("[MAIL] Demande de service de {} à {} : {}", requesterEmail, adminEmail, objective);
+    }
 }
