@@ -53,4 +53,8 @@ public class User extends SyncableEntity {
     
     @Column(name = "resend_attempts")
     private Integer resendAttempts = 0;
+    
+    @Column(name = "must_change_password")
+    @Builder.Default
+    private boolean mustChangePassword = false;
 }

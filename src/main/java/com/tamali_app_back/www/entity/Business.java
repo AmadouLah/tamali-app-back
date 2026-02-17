@@ -1,5 +1,6 @@
 package com.tamali_app_back.www.entity;
 
+import com.tamali_app_back.www.enums.LegalStatus;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -31,6 +32,27 @@ public class Business extends SyncableEntity {
     private String email;
     private String phone;
     private String address;
+    private String country;
+    
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "sector_id")
+    private BusinessSector sector;
+    
+    @Column(name = "commerce_register_number")
+    private String commerceRegisterNumber;
+    
+    @Column(name = "identification_number")
+    private String identificationNumber;
+    
+    @Enumerated(EnumType.STRING)
+    @Column(name = "legal_status")
+    private LegalStatus legalStatus;
+    
+    @Column(name = "bank_account_number")
+    private String bankAccountNumber;
+    
+    @Column(name = "website_url")
+    private String websiteUrl;
 
     @OneToMany(mappedBy = "business", cascade = CascadeType.ALL)
     @Builder.Default

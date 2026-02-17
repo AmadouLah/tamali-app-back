@@ -4,7 +4,7 @@ import com.tamali_app_back.www.dto.BusinessDto;
 import com.tamali_app_back.www.dto.request.BusinessCreateRequest;
 import com.tamali_app_back.www.dto.request.BusinessUpdateReceiptTemplateRequest;
 import com.tamali_app_back.www.dto.request.BusinessUpdateRequest;
-import com.tamali_app_back.www.exception.ResourceNotFoundException;
+import com.tamali_app_back.www.dto.request.BusinessUpdateStepRequest;
 import com.tamali_app_back.www.service.BusinessService;
 import com.tamali_app_back.www.util.ResponseUtil;
 import jakarta.validation.Valid;
@@ -61,5 +61,21 @@ public class BusinessController {
         BusinessDto dto = ResponseUtil.requireFound(
                 businessService.updateReceiptTemplate(id, request.receiptTemplateId()), "Business", id);
         return ResponseEntity.ok(dto);
+    }
+
+    /**
+     * Met à jour les informations de l'entreprise étape par étape.
+     */
+    @PatchMapping("/{id}/step")
+    public ResponseEntity<BusinessDto> updateStep(
+            @PathVariable UUID id,
+            @Valid @RequestBody BusinessUpdateStepRequest request) {
+        BusinessDto dto = businessService.updateStep(
+                id, request.step(), request.name(), request.sectorId(),
+                request.address(), request.phone(), request.country(),
+                request.commerceRegisterNumber(), request.identificationNumber(),
+                request.legalStatus(), request.bankAccountNumber(), request.websiteUrl(),
+                request.logoUrl(), request.receiptTemplateId());
+        return ResponseEntity.ok(ResponseUtil.requireFound(dto, "Business", id));
     }
 }

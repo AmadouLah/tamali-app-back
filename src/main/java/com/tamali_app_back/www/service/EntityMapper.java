@@ -11,9 +11,19 @@ public class EntityMapper {
 
     public BusinessDto toDto(Business e) {
         if (e == null) return null;
-        return new BusinessDto(e.getId(), e.getName(), e.getEmail(), e.getPhone(), e.getAddress(),
+        return new BusinessDto(
+                e.getId(), e.getName(), e.getEmail(), e.getPhone(), e.getAddress(),
+                e.getCountry(),
+                e.getSector() != null ? e.getSector().getId() : null,
+                e.getCommerceRegisterNumber(), e.getIdentificationNumber(),
+                e.getLegalStatus(), e.getBankAccountNumber(), e.getWebsiteUrl(),
                 e.isActive(), e.getReceiptTemplate() != null ? e.getReceiptTemplate().getId() : null,
                 e.getLogoUrl(), e.getCreatedAt());
+    }
+
+    public BusinessSectorDto toDto(BusinessSector e) {
+        if (e == null) return null;
+        return new BusinessSectorDto(e.getId(), e.getName(), e.getDescription(), e.isActive(), e.getCreatedAt());
     }
 
     public RoleDto toDto(Role e) {
@@ -26,7 +36,8 @@ public class EntityMapper {
         return new UserDto(
                 e.getId(), e.getFirstname(), e.getLastname(), e.getEmail(), e.isEnabled(),
                 e.getBusiness() != null ? e.getBusiness().getId() : null,
-                e.getRoles() != null ? e.getRoles().stream().map(this::toDto).collect(Collectors.toSet()) : null
+                e.getRoles() != null ? e.getRoles().stream().map(this::toDto).collect(Collectors.toSet()) : null,
+                e.isMustChangePassword()
         );
     }
 

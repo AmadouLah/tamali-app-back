@@ -5,6 +5,7 @@ import com.tamali_app_back.www.dto.EmailCheckResponse;
 import com.tamali_app_back.www.dto.UserDto;
 import com.tamali_app_back.www.dto.request.CheckEmailRequest;
 import com.tamali_app_back.www.dto.request.ConfirmLoginRequest;
+import com.tamali_app_back.www.dto.request.DirectPasswordLoginRequest;
 import com.tamali_app_back.www.dto.request.PasswordLoginRequest;
 import com.tamali_app_back.www.dto.request.RequestCodeRequest;
 import com.tamali_app_back.www.entity.User;
@@ -59,6 +60,23 @@ public class AuthController {
     @PostMapping("/confirm-login")
     public ResponseEntity<AuthResponse> confirmLogin(@Valid @RequestBody ConfirmLoginRequest request) {
         User user = userService.confirmLogin(request.userId(), request.code());
+        String token = jwtService.generateToken(user.getId(), user.getEmail());
+        return ResponseEntity.ok(new AuthResponse(token, mapper.toDto(user)));
+    }
+
+    /**
+     * Authentification directe avec email et mot de passe.
+     * Si l'utilisateur doit changer son mot de passe temporaire, retourne mustChangePassword=true.
+     * Sinon, retourne un token JWT.
+     */
+    @PostMapping("/direct-login")
+    public ResponseEntity<?> directLogin(@Valid @RequestBody DirectPasswordLoginRequest request) {
+        User user = userService.authenticateDirectlyWithPassword(request.email(), request.password());
+        
+        if (user.isMustChangePassword()) {
+            return ResponseEntity.ok(mapper.toDto(user));
+        }
+        
         String token = jwtService.generateToken(user.getId(), user.getEmail());
         return ResponseEntity.ok(new AuthResponse(token, mapper.toDto(user)));
     }

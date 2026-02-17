@@ -28,4 +28,12 @@ public interface MailService {
      * @param adminEmail email du destinataire (SUPER_ADMIN)
      */
     void sendServiceRequest(String requesterEmail, String objective, String adminEmail);
+
+    /**
+     * Envoie l'email contenant le mot de passe temporaire et le lien de connexion.
+     * @param toEmail destinataire
+     * @param temporaryPassword mot de passe temporaire de 10 caractères
+     * @param loginUrl URL de la page de connexion
+     */
+    void sendTemporaryPassword(String toEmail, String temporaryPassword, String loginUrl);
 }

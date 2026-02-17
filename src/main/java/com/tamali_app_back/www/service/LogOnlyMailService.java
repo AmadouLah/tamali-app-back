@@ -23,4 +23,9 @@ public class LogOnlyMailService implements MailService {
     public void sendServiceRequest(String requesterEmail, String objective, String adminEmail) {
         log.info("[MAIL] Demande de service de {} à {} : {}", requesterEmail, adminEmail, objective);
     }
+
+    @Override
+    public void sendTemporaryPassword(String toEmail, String temporaryPassword, String loginUrl) {
+        log.info("[MAIL] Mot de passe temporaire pour {} : {} - Lien: {}", toEmail, temporaryPassword, loginUrl);
+    }
 }

@@ -1,25 +1,21 @@
-package com.tamali_app_back.www.dto;
+package com.tamali_app_back.www.dto.request;
 
 import com.tamali_app_back.www.enums.LegalStatus;
 
-import java.time.LocalDateTime;
 import java.util.UUID;
 
-public record BusinessDto(
-        UUID id,
+public record BusinessUpdateStepRequest(
+        Integer step,
         String name,
-        String email,
-        String phone,
-        String address,
-        String country,
         UUID sectorId,
+        String address,
+        String phone,
+        String country,
         String commerceRegisterNumber,
         String identificationNumber,
         LegalStatus legalStatus,
         String bankAccountNumber,
         String websiteUrl,
-        boolean active,
-        UUID receiptTemplateId,
         String logoUrl,
-        LocalDateTime createdAt
+        UUID receiptTemplateId
 ) {}

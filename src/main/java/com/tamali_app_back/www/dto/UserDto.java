@@ -10,5 +10,6 @@ public record UserDto(
         String email,
         boolean enabled,
         UUID businessId,
-        Set<RoleDto> roles
+        Set<RoleDto> roles,
+        Boolean mustChangePassword
 ) {}

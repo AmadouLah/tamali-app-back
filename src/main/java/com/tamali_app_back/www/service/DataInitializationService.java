@@ -64,7 +64,7 @@ public class DataInitializationService implements CommandLineRunner {
 
         int created = 0;
         int updated = 0;
-
+        
         for (DefaultUser du : defaults) {
             try {
                 String email = du.email().trim();

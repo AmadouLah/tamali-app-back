@@ -1,7 +1,9 @@
 package com.tamali_app_back.www.controller;
 
 import com.tamali_app_back.www.dto.UserDto;
+import com.tamali_app_back.www.dto.request.ChangeTemporaryPasswordRequest;
 import com.tamali_app_back.www.dto.request.ConfirmCodeRequest;
+import com.tamali_app_back.www.dto.request.CreateBusinessOwnerRequest;
 import com.tamali_app_back.www.dto.request.UserCreateRequest;
 import com.tamali_app_back.www.exception.BadRequestException;
 import com.tamali_app_back.www.exception.ResourceNotFoundException;
@@ -62,6 +64,41 @@ public class UserController {
     public ResponseEntity<UserDto> confirmCode(@PathVariable UUID id, @Valid @RequestBody ConfirmCodeRequest request) {
         UserDto dto = userService.confirmCodeAndEnable(id, request.code());
         if (dto == null) throw new BadRequestException("Code invalide ou expiré.");
+        return ResponseEntity.ok(dto);
+    }
+
+    /**
+     * Crée un propriétaire d'entreprise avec juste l'email.
+     * Génère un mot de passe temporaire et l'envoie par email.
+     */
+    @PostMapping("/business-owner")
+    public ResponseEntity<UserDto> createBusinessOwner(@Valid @RequestBody CreateBusinessOwnerRequest request) {
+        UserDto dto = userService.createBusinessOwnerWithEmail(request.email());
+        return ResponseEntity.status(HttpStatus.CREATED).body(dto);
+    }
+
+    /**
+     * Change le mot de passe temporaire d'un utilisateur.
+     */
+    @PostMapping("/{id}/change-temporary-password")
+    public ResponseEntity<UserDto> changeTemporaryPassword(
+            @PathVariable UUID id,
+            @Valid @RequestBody ChangeTemporaryPasswordRequest request) {
+        UserDto dto = userService.changeTemporaryPassword(id, request.currentPassword(), request.newPassword());
+        return ResponseEntity.ok(dto);
+    }
+
+    /**
+     * Met à jour un utilisateur (pour lier une entreprise par exemple).
+     */
+    @PatchMapping("/{id}")
+    public ResponseEntity<UserDto> update(
+            @PathVariable UUID id,
+            @RequestBody Map<String, Object> updates) {
+        UUID businessId = updates.containsKey("businessId") && updates.get("businessId") != null
+                ? UUID.fromString(updates.get("businessId").toString())
+                : null;
+        UserDto dto = userService.updateBusiness(id, businessId);
         return ResponseEntity.ok(dto);
     }
 }

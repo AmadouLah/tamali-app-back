@@ -15,6 +15,7 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -43,6 +44,9 @@ public class UserService {
     private final EntityMapper mapper;
     private final PasswordEncoder passwordEncoder;
     private final EntityManager entityManager;
+
+    @Value("${app.frontend-url:http://localhost:4200}")
+    private String frontendUrl;
 
     @Transactional(readOnly = true)
     public UserDto findByEmail(String email) {
@@ -76,27 +80,135 @@ public class UserService {
     }
 
     /**
+     * Crée un propriétaire d'entreprise avec juste l'email.
+     * Génère un mot de passe temporaire de 10 caractères et l'envoie par email.
+     */
+    @Transactional
+    public UserDto createBusinessOwnerWithEmail(String email) {
+        if (userRepository.existsByEmail(email)) {
+            throw new BadRequestException("Un compte existe déjà avec cet email.");
+        }
+
+        Role businessOwnerRole = roleRepository.findByType(RoleType.BUSINESS_OWNER)
+                .orElseThrow(() -> new IllegalStateException("Rôle BUSINESS_OWNER introuvable."));
+
+        String temporaryPassword = generateTemporaryPassword();
+        String encodedPassword = passwordEncoder.encode(temporaryPassword);
+
+        User user = User.builder()
+                .email(email.trim())
+                .password(encodedPassword)
+                .enabled(true)
+                .mustChangePassword(true)
+                .business(null)
+                .roles(Set.of(businessOwnerRole))
+                .build();
+
+        user = userRepository.save(user);
+
+        String loginUrl = frontendUrl + "/auth/login";
+        try {
+            mailService.sendTemporaryPassword(email, temporaryPassword, loginUrl);
+        } catch (Exception e) {
+            log.warn("Erreur lors de l'envoi de l'email avec le mot de passe temporaire à {}: {}", email, e.getMessage());
+            // Ne pas faire échouer la création si l'email échoue
+        }
+
+        log.info("Propriétaire d'entreprise créé avec email: {}", email);
+        return mapper.toDto(user);
+    }
+
+    /**
+     * Change le mot de passe temporaire d'un utilisateur.
+     */
+    @Transactional
+    public UserDto changeTemporaryPassword(UUID userId, String currentPassword, String newPassword) {
+        User user = loadUserByIdWithoutInvalidRoles(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Utilisateur", userId));
+
+        if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
+            throw new BadRequestException("Mot de passe actuel incorrect.");
+        }
+
+        if (!user.isMustChangePassword()) {
+            throw new BadRequestException("Ce compte n'a pas besoin de changer son mot de passe.");
+        }
+
+        String encodedNewPassword = passwordEncoder.encode(newPassword);
+        
+        Query updateQuery = entityManager.createNativeQuery(
+            "UPDATE users SET password = :password, must_change_password = false, updated_at = :updatedAt " +
+            "WHERE id = :userId AND deleted_at IS NULL"
+        );
+        updateQuery.setParameter("password", encodedNewPassword);
+        updateQuery.setParameter("updatedAt", Timestamp.valueOf(LocalDateTime.now()));
+        updateQuery.setParameter("userId", userId);
+        int updated = updateQuery.executeUpdate();
+
+        if (updated == 0) {
+            throw new ResourceNotFoundException("Utilisateur", userId);
+        }
+
+        user.setPassword(encodedNewPassword);
+        user.setMustChangePassword(false);
+
+        log.info("Mot de passe temporaire changé pour l'utilisateur: {}", user.getEmail());
+        return mapper.toDto(user);
+    }
+
+    /**
+     * Met à jour l'entreprise d'un utilisateur.
+     */
+    @Transactional
+    public UserDto updateBusiness(UUID userId, UUID businessId) {
+        User user = loadUserByIdWithoutInvalidRoles(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Utilisateur", userId));
+        
+        if (businessId != null) {
+            Business business = businessRepository.findById(businessId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Entreprise", businessId));
+            user.setBusiness(business);
+        } else {
+            user.setBusiness(null);
+        }
+        
+        return mapper.toDto(userRepository.save(user));
+    }
+
+    /**
      * Confirme le code de connexion et retourne l'utilisateur activé.
+     * Vérifie toujours les données fraîches depuis la base de données pour permettre
+     * plusieurs tentatives avec le même code tant qu'il n'a pas expiré.
      */
     @Transactional
     public User confirmLogin(UUID userId, String code) {
+        // Vider le cache de l'EntityManager pour s'assurer de charger les données fraîches
+        entityManager.clear();
+        
         User user = loadUserByIdWithoutInvalidRoles(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Utilisateur", userId));
+        
         if (!user.isEnabled()) {
             throw new BadRequestException("Le compte n'est pas activé.");
         }
+        
         if (user.getVerificationCode() == null || user.getCodeExpiration() == null) {
             throw new BadRequestException("Aucun code de vérification en attente.");
         }
-        if (!code.equals(user.getVerificationCode())) {
-            throw new BadRequestException("Code invalide.");
-        }
-        if (LocalDateTime.now().isAfter(user.getCodeExpiration())) {
+        
+        // Vérifier l'expiration AVANT de vérifier le code pour un message d'erreur plus clair
+        LocalDateTime now = LocalDateTime.now();
+        if (now.isAfter(user.getCodeExpiration())) {
             throw new BadRequestException("Code expiré.");
         }
         
+        // Vérifier le code après avoir vérifié l'expiration
+        if (!code.equals(user.getVerificationCode())) {
+            throw new BadRequestException("Code invalide.");
+        }
+        
         // Mettre à jour via requête native pour éviter le chargement EAGER des rôles invalides
-        LocalDateTime now = LocalDateTime.now();
+        // Invalider le code après utilisation réussie
         Query updateQuery = entityManager.createNativeQuery(
             "UPDATE users SET verification_code = NULL, code_expiration = NULL, " +
             "resend_attempts = 0, updated_at = :updatedAt " +
@@ -120,6 +232,19 @@ public class UserService {
 
     private String generateVerificationCode() {
         return String.format("%06d", new SecureRandom().nextInt(1_000_000));
+    }
+
+    /**
+     * Génère un mot de passe temporaire alphanumérique de 10 caractères.
+     */
+    private String generateTemporaryPassword() {
+        String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+        SecureRandom random = new SecureRandom();
+        StringBuilder password = new StringBuilder(10);
+        for (int i = 0; i < 10; i++) {
+            password.append(chars.charAt(random.nextInt(chars.length())));
+        }
+        return password.toString();
     }
 
     @Transactional
@@ -156,9 +281,14 @@ public class UserService {
 
     /**
      * Authentifie un utilisateur avec son mot de passe et envoie un code OTP par email.
+     * Génère un nouveau code qui remplace l'ancien code s'il existe.
+     * Si l'utilisateur doit changer son mot de passe temporaire, une exception est levée.
      */
     @Transactional
     public UserDto authenticateWithPassword(UUID userId, String password) {
+        // Vider le cache pour s'assurer de charger les données fraîches
+        entityManager.clear();
+        
         User user = loadUserByIdWithoutInvalidRoles(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Utilisateur", userId));
         
@@ -170,12 +300,18 @@ public class UserService {
             throw new BadRequestException("Mot de passe incorrect.");
         }
         
-        // Générer et envoyer le code OTP
+        // Si l'utilisateur doit changer son mot de passe temporaire, il ne peut pas utiliser le flux OTP
+        if (user.isMustChangePassword()) {
+            throw new BadRequestException("Vous devez changer votre mot de passe temporaire avant de continuer.");
+        }
+        
+        // Générer un nouveau code OTP qui remplace l'ancien
         String code = generateVerificationCode();
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime expiration = now.plusMinutes(CODE_VALIDITY_MINUTES);
         
         // Mettre à jour via requête native pour éviter le chargement EAGER des rôles invalides
+        // L'ancien code est automatiquement remplacé par le nouveau
         Query updateQuery = entityManager.createNativeQuery(
             "UPDATE users SET verification_code = :code, code_expiration = :expiration, " +
             "last_code_sent_at = :lastSentAt, resend_attempts = 0, updated_at = :updatedAt " +
@@ -210,11 +346,39 @@ public class UserService {
     }
 
     /**
+     * Authentifie directement un utilisateur avec son email et mot de passe.
+     * Si l'utilisateur doit changer son mot de passe temporaire, retourne l'utilisateur avec mustChangePassword=true.
+     */
+    @Transactional
+    public User authenticateDirectlyWithPassword(String email, String password) {
+        entityManager.clear();
+        
+        User user = loadUserWithoutInvalidRoles(email.trim());
+        if (user == null) {
+            throw new ResourceNotFoundException("Aucun compte avec cet email.");
+        }
+        
+        if (!user.isEnabled()) {
+            throw new BadRequestException("Le compte n'est pas activé.");
+        }
+        
+        if (!passwordEncoder.matches(password, user.getPassword())) {
+            throw new BadRequestException("Mot de passe incorrect.");
+        }
+        
+        return user;
+    }
+
+    /**
      * Génère un code à 6 chiffres, le sauvegarde sur l'utilisateur et envoie l'email via Brevo (ou log).
      * Vérifie les limitations : 30 secondes entre chaque envoi, maximum 3 tentatives.
+     * L'ancien code est automatiquement désactivé et remplacé par le nouveau code.
      */
     @Transactional
     public UserDto requestLoginCode(String email) {
+        // Vider le cache pour s'assurer de charger les données fraîches
+        entityManager.clear();
+        
         User u = loadUserWithoutInvalidRoles(email.trim());
         if (u == null) {
             throw new ResourceNotFoundException("Aucun compte avec cet email.");
@@ -236,11 +400,13 @@ public class UserService {
             throw new BadRequestException("Nombre maximum de tentatives de renvoi atteint. Veuillez réessayer plus tard.");
         }
         
+        // Générer un nouveau code qui remplace l'ancien
         String code = generateVerificationCode();
         LocalDateTime exp = now.plusMinutes(CODE_VALIDITY_MINUTES);
         int newResendAttempts = (u.getResendAttempts() == null ? 0 : u.getResendAttempts()) + 1;
         
         // Mettre à jour via requête native pour éviter le chargement EAGER des rôles invalides
+        // L'ancien code est automatiquement remplacé par le nouveau dans la base de données
         Query updateQuery = entityManager.createNativeQuery(
             "UPDATE users SET verification_code = :code, code_expiration = :expiration, " +
             "last_code_sent_at = :lastSentAt, resend_attempts = :resendAttempts, updated_at = :updatedAt " +
