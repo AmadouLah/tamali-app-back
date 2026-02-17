@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -61,6 +62,16 @@ public class BusinessController {
         BusinessDto dto = ResponseUtil.requireFound(
                 businessService.updateReceiptTemplate(id, request.receiptTemplateId()), "Business", id);
         return ResponseEntity.ok(dto);
+    }
+
+    /**
+     * Upload le logo de l'entreprise vers Supabase Storage et met à jour l'URL.
+     */
+    @PostMapping("/{id}/logo")
+    public ResponseEntity<BusinessDto> uploadLogo(
+            @PathVariable UUID id,
+            @RequestParam("file") MultipartFile file) {
+        return ResponseEntity.ok(businessService.uploadLogo(id, file));
     }
 
     /**

@@ -13,7 +13,9 @@ import com.tamali_app_back.www.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -27,6 +29,7 @@ public class BusinessService {
     private final BusinessSectorRepository businessSectorRepository;
     private final UserRepository userRepository;
     private final EntityMapper mapper;
+    private final SupabaseStorageService supabaseStorage;
 
     @Transactional(readOnly = true)
     public List<BusinessDto> findAll() {
@@ -65,6 +68,19 @@ public class BusinessService {
         });
         
         return mapper.toDto(savedBusiness);
+    }
+
+    @Transactional
+    public BusinessDto uploadLogo(UUID id, MultipartFile file) {
+        try {
+            Business business = businessRepository.findById(id)
+                    .orElseThrow(() -> new ResourceNotFoundException("Entreprise", id));
+            String logoUrl = supabaseStorage.uploadLogo(id, file);
+            business.setLogoUrl(logoUrl);
+            return mapper.toDto(businessRepository.save(business));
+        } catch (IOException e) {
+            throw new RuntimeException("Erreur lors de l'upload du logo.", e);
+        }
     }
 
     @Transactional

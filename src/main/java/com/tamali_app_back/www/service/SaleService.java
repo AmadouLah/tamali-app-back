@@ -4,6 +4,7 @@ import com.tamali_app_back.www.dto.InvoiceDto;
 import com.tamali_app_back.www.dto.PaymentDto;
 import com.tamali_app_back.www.dto.SaleDto;
 import com.tamali_app_back.www.dto.request.SaleItemRequest;
+import lombok.extern.slf4j.Slf4j;
 import com.tamali_app_back.www.entity.*;
 import com.tamali_app_back.www.enums.MovementType;
 import com.tamali_app_back.www.enums.PaymentMethod;
@@ -22,6 +23,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class SaleService {
 
     private final SaleRepository saleRepository;
@@ -36,6 +38,8 @@ public class SaleService {
     private final PaymentService paymentService;
     private final TaxConfigurationRepository taxConfigurationRepository;
     private final EntityMapper mapper;
+    private final ReceiptPdfService receiptPdfService;
+    private final SupabaseStorageService supabaseStorage;
 
     @Transactional(readOnly = true)
     public List<SaleDto> findByBusinessId(UUID businessId, int page, int size) {
@@ -138,6 +142,8 @@ public class SaleService {
                 .build();
         invoiceRepository.save(invoice);
 
+        uploadReceiptToSupabase(sale, invoice);
+
         return mapper.toDto(sale);
     }
 
@@ -149,5 +155,16 @@ public class SaleService {
     @Transactional
     public void markInvoiceSentByWhatsapp(UUID invoiceId) {
         invoiceService.markSentByWhatsapp(invoiceId);
+    }
+
+    private void uploadReceiptToSupabase(Sale sale, Invoice invoice) {
+        try {
+            byte[] pdfBytes = receiptPdfService.generateReceiptPdf(sale);
+            String receiptUrl = supabaseStorage.uploadReceiptPdf(sale.getBusiness().getId(), sale.getId(), pdfBytes);
+            invoice.setReceiptPdfUrl(receiptUrl);
+            invoiceRepository.save(invoice);
+        } catch (Exception e) {
+            log.warn("Impossible d'uploader le reçu vers Supabase pour la vente {}: {}", sale.getId(), e.getMessage());
+        }
     }
 }

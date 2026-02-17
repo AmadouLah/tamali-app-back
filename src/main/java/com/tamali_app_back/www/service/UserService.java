@@ -400,21 +400,35 @@ public class UserService {
 
     /**
      * Met à jour l'entreprise d'un utilisateur.
+     * Utilise une requête native pour éviter les conflits d'optimistic locking
+     * (l'entité User chargée manuellement n'a pas la version correcte).
      */
     @Transactional
     public UserDto updateBusiness(UUID userId, UUID businessId) {
-        User user = loadUserByIdWithoutInvalidRoles(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("Utilisateur", userId));
-        
         if (businessId != null) {
-            Business business = businessRepository.findById(businessId)
+            businessRepository.findById(businessId)
                     .orElseThrow(() -> new ResourceNotFoundException("Entreprise", businessId));
-            user.setBusiness(business);
-        } else {
-            user.setBusiness(null);
         }
-        
-        return mapper.toDto(userRepository.save(user));
+        if (!loadUserByIdWithoutInvalidRoles(userId).isPresent()) {
+            throw new ResourceNotFoundException("Utilisateur", userId);
+        }
+
+        Query updateQuery = entityManager.createNativeQuery(
+            "UPDATE users SET business_id = :businessId, updated_at = :updatedAt, version = version + 1 " +
+            "WHERE id = :userId AND deleted_at IS NULL"
+        );
+        updateQuery.setParameter("businessId", businessId);
+        updateQuery.setParameter("updatedAt", Timestamp.valueOf(LocalDateTime.now()));
+        updateQuery.setParameter("userId", userId);
+        int updated = updateQuery.executeUpdate();
+
+        if (updated == 0) {
+            throw new ResourceNotFoundException("Utilisateur", userId);
+        }
+
+        return loadUserByIdWithoutInvalidRoles(userId)
+                .map(mapper::toDto)
+                .orElseThrow(() -> new ResourceNotFoundException("Utilisateur", userId));
     }
 
     /**

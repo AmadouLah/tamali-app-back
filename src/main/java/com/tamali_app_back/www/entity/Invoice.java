@@ -33,6 +33,9 @@ public class Invoice extends SyncableEntity {
     private String customerEmail;
     private String customerPhone;
 
+    @Column(name = "receipt_pdf_url")
+    private String receiptPdfUrl;
+
     private boolean sentByEmail;
     private boolean sentByWhatsapp;
 }

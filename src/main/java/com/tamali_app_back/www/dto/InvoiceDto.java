@@ -9,6 +9,7 @@ public record InvoiceDto(
         String invoiceNumber,
         String customerEmail,
         String customerPhone,
+        String receiptPdfUrl,
         boolean sentByEmail,
         boolean sentByWhatsapp,
         LocalDateTime createdAt

@@ -81,7 +81,7 @@ public class EntityMapper {
         if (e == null) return null;
         return new InvoiceDto(e.getId(), e.getSale() != null ? e.getSale().getId() : null,
                 e.getInvoiceNumber(), e.getCustomerEmail(), e.getCustomerPhone(),
-                e.isSentByEmail(), e.isSentByWhatsapp(), e.getCreatedAt());
+                e.getReceiptPdfUrl(), e.isSentByEmail(), e.isSentByWhatsapp(), e.getCreatedAt());
     }
 
     public PaymentDto toDto(Payment e) {
