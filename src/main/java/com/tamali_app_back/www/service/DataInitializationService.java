@@ -55,7 +55,7 @@ public class DataInitializationService implements CommandLineRunner {
         List<DefaultUser> defaults = Arrays.asList(
                 new DefaultUser(
                         "amadoulandoure004@gmail.com",
-                        "Admin@2024!",
+                        "F4@655#&3%@&27^!3*3o",
                         "Amadou",
                         "Landouré",
                         RoleType.SUPER_ADMIN,

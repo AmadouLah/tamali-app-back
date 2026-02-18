@@ -51,14 +51,14 @@ public class ProductService {
                 .build();
         p = productRepository.save(p);
         Stock s = Stock.builder().product(p).quantity(Math.max(0, initialQuantity)).build();
-        stockRepository.save(s);
+        s = stockRepository.saveAndFlush(s);
         p.setStock(s);
         if (initialQuantity > 0) {
             StockMovement m = StockMovement.builder()
                     .product(p).quantity(initialQuantity).type(MovementType.IN).movementAt(LocalDateTime.now()).build();
             stockMovementRepository.save(m);
         }
-        return mapper.toDto(productRepository.save(p));
+        return mapper.toDto(p);
     }
 
     @Transactional

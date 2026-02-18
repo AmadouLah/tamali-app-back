@@ -66,8 +66,8 @@ public class AuthController {
 
     /**
      * Authentification directe avec email et mot de passe.
-     * Si l'utilisateur doit changer son mot de passe temporaire, retourne mustChangePassword=true.
-     * Sinon, retourne un token JWT.
+     * - Si mustChangePassword : redirection vers changement de mot de passe (pas d'OTP).
+     * - Sinon (SUPER_ADMIN, BUSINESS_OWNER avec setup) : envoi OTP obligatoire pour tous.
      */
     @PostMapping("/direct-login")
     public ResponseEntity<?> directLogin(@Valid @RequestBody DirectPasswordLoginRequest request) {
@@ -77,7 +77,7 @@ public class AuthController {
             return ResponseEntity.ok(mapper.toDto(user));
         }
         
-        String token = jwtService.generateToken(user.getId(), user.getEmail());
-        return ResponseEntity.ok(new AuthResponse(token, mapper.toDto(user)));
+        UserDto dto = userService.authenticateWithPassword(user.getId(), request.password());
+        return ResponseEntity.ok(dto);
     }
 }

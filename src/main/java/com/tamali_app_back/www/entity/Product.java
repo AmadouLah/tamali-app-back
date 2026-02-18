@@ -36,7 +36,7 @@ public class Product extends SyncableEntity {
     @JoinColumn(name = "business_id", nullable = false)
     private Business business;
 
-    @OneToOne(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToOne(mappedBy = "product")
     private Stock stock;
 
     private boolean taxable;

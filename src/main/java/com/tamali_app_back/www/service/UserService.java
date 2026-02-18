@@ -946,6 +946,9 @@ public class UserService {
                 return null;
             }
             
+            UUID businessId = result[6] != null ? (UUID) result[6] : null;
+            Business business = businessId != null ? businessRepository.findById(businessId).orElse(null) : null;
+            
             User user = User.builder()
                     .id((UUID) result[0])
                     .firstname((String) result[1])
@@ -953,6 +956,7 @@ public class UserService {
                     .email((String) result[3])
                     .password((String) result[4])
                     .enabled((Boolean) result[5])
+                    .business(business)
                     .verificationCode((String) result[7])
                     .codeExpiration(convertToLocalDateTime(result[8]))
                     .lastCodeSentAt(convertToLocalDateTime(result[9]))
