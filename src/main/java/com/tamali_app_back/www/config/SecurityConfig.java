@@ -3,6 +3,7 @@ package com.tamali_app_back.www.config;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -10,35 +11,56 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy;
 import org.springframework.web.cors.CorsConfigurationSource;
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 public class SecurityConfig {
 
-    private static final String[] SWAGGER_PATHS = {
+    private static final String[] PUBLIC_ENDPOINTS = {
+            "/api/auth/**",
+            "/api/**",
             "/swagger-ui/**",
             "/swagger-ui.html",
             "/v3/api-docs/**",
-            "/v3/api-docs.yaml"
+            "/v3/api-docs.yaml",
+            "/actuator/health"
     };
+
+    private static final String CSP_POLICY = "default-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'";
+    private static final long HSTS_MAX_AGE = 31536000L;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http, CorsConfigurationSource corsConfigurationSource) throws Exception {
         return http
-                .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .csrf(AbstractHttpConfigurer::disable)
+                .cors(cors -> cors.configurationSource(corsConfigurationSource))
+                .headers(this::configureSecurityHeaders)
+                .authorizeHttpRequests(this::configureAuthorizations)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers(SWAGGER_PATHS).permitAll()
-                        .requestMatchers("/actuator/health").permitAll()
-                        .requestMatchers("/api/**").permitAll()
-                        .anyRequest().authenticated())
-                .headers(headers -> headers
-                        .frameOptions(frame -> frame.sameOrigin())
-                        .contentTypeOptions(contentType -> contentType.disable()))
                 .build();
+    }
+
+    private void configureSecurityHeaders(
+            org.springframework.security.config.annotation.web.configurers.HeadersConfigurer<?> headers) {
+        headers
+                .contentSecurityPolicy(csp -> csp.policyDirectives(CSP_POLICY))
+                .referrerPolicy(referrer -> referrer.policy(ReferrerPolicy.NO_REFERRER))
+                .frameOptions(frame -> frame.sameOrigin())
+                .httpStrictTransportSecurity(hsts -> hsts
+                        .includeSubDomains(true)
+                        .preload(true)
+                        .maxAgeInSeconds(HSTS_MAX_AGE));
+    }
+
+    private void configureAuthorizations(
+            org.springframework.security.config.annotation.web.configurers.AuthorizeHttpRequestsConfigurer<?>.AuthorizationManagerRequestMatcherRegistry auth) {
+        auth
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
+                .anyRequest().authenticated();
     }
 
     @Bean
