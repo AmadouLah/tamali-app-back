@@ -42,12 +42,11 @@ public class SecurityConfig {
         
         return http
                 .csrf(AbstractHttpConfigurer::disable)
-                // DÉSACTIVER temporairement la configuration CORS de Spring Security
-                // car nous utilisons CustomCorsFilter qui s'exécute avant
-                // .cors(cors -> {
-                //     cors.configurationSource(corsConfigurationSource);
-                //     log.info("CORS configuré dans Spring Security avec configuration source");
-                // })
+                // Configuration CORS - réactivée pour double protection
+                .cors(cors -> {
+                    cors.configurationSource(corsConfigurationSource);
+                    log.info("CORS configuré dans Spring Security avec configuration source");
+                })
                 .authorizeHttpRequests(this::configureAuthorizations)
                 .headers(headers -> {
                     // Configurer les headers de sécurité mais s'assurer qu'ils n'écrasent pas CORS

@@ -30,10 +30,17 @@ public class CustomCorsFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         
         String origin = request.getHeader("Origin");
-        boolean isOptionsRequest = "OPTIONS".equalsIgnoreCase(request.getMethod());
+        String method = request.getMethod();
+        boolean isOptionsRequest = "OPTIONS".equalsIgnoreCase(method);
         
-        log.info("=== CustomCorsFilter - Méthode: {}, Origin: {}, Path: {} ===", 
-                request.getMethod(), origin, request.getRequestURI());
+        // Log TOUJOURS pour voir toutes les requêtes
+        // Log TOUJOURS pour voir toutes les requêtes, surtout OPTIONS
+        log.info("🔵 CustomCorsFilter EXÉCUTÉ - Méthode: {}, Origin: {}, Path: {}", 
+                method, origin, request.getRequestURI());
+        
+        if (isOptionsRequest) {
+            log.info("🟢 REQUÊTE OPTIONS DÉTECTÉE - Traitement immédiat...");
+        }
         
         // Parser les origines autorisées
         List<String> allowedOrigins = parseOrigins(allowedOriginsString);
