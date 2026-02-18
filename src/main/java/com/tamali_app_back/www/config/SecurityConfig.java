@@ -1,5 +1,6 @@
 package com.tamali_app_back.www.config;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -17,6 +18,7 @@ import org.springframework.web.cors.CorsConfigurationSource;
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
+@Slf4j
 public class SecurityConfig {
 
     private static final String[] PUBLIC_ENDPOINTS = {
@@ -34,9 +36,16 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http, CorsConfigurationSource corsConfigurationSource) throws Exception {
+        log.info("Configuration de la chaîne de sécurité Spring Security");
+        log.info("Configuration CORS intégrée dans Spring Security");
+        
         return http
                 .csrf(AbstractHttpConfigurer::disable)
-                .cors(cors -> cors.configurationSource(corsConfigurationSource))
+                // Configuration CORS - doit être avant authorizeHttpRequests
+                .cors(cors -> {
+                    cors.configurationSource(corsConfigurationSource);
+                    log.info("CORS configuré dans Spring Security");
+                })
                 .headers(this::configureSecurityHeaders)
                 .authorizeHttpRequests(this::configureAuthorizations)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -57,10 +66,19 @@ public class SecurityConfig {
 
     private void configureAuthorizations(
             org.springframework.security.config.annotation.web.configurers.AuthorizeHttpRequestsConfigurer<?>.AuthorizationManagerRequestMatcherRegistry auth) {
+        log.info("Configuration des autorisations Spring Security");
+        log.info("Endpoints publics: {}", java.util.Arrays.toString(PUBLIC_ENDPOINTS));
+        
         auth
+                // CRITIQUE: Autoriser toutes les requêtes OPTIONS (preflight CORS) AVANT toute autre vérification
+                // Cela garantit que les requêtes preflight CORS ne sont pas bloquées
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                // Autoriser les endpoints publics (inclut /api/service-requests)
                 .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
+                // Toutes les autres requêtes nécessitent une authentification
                 .anyRequest().authenticated();
+        
+        log.info("Configuration des autorisations terminée - OPTIONS et endpoints publics autorisés");
     }
 
     @Bean
