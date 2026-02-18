@@ -35,14 +35,18 @@ public class CorsConfig {
         log.info("Origines autorisées parsées: {}", allowedOrigins);
         
         boolean isWildcard = allowedOrigins.contains("*");
+        boolean hasPatterns = allowedOrigins.stream().anyMatch(o -> o.contains("*"));
 
         if (isWildcard) {
             log.info("Mode wildcard activé - toutes les origines autorisées");
             configuration.setAllowedOriginPatterns(List.of("*"));
             configuration.setAllowCredentials(false);
+        } else if (hasPatterns) {
+            log.info("Mode patterns activé (ex: *.vercel.app) - patterns: {}", allowedOrigins);
+            configuration.setAllowedOriginPatterns(allowedOrigins);
+            configuration.setAllowCredentials(true);
         } else {
             log.info("Mode spécifique activé - origines: {}", allowedOrigins);
-            // Utiliser setAllowedOrigins pour les origines spécifiques
             configuration.setAllowedOrigins(allowedOrigins);
             configuration.setAllowCredentials(true);
         }

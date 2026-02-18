@@ -44,7 +44,7 @@ public class CustomCorsFilter extends OncePerRequestFilter {
         
         // Parser les origines autorisées
         List<String> allowedOrigins = parseOrigins(allowedOriginsString);
-        boolean isOriginAllowed = origin != null && (allowedOrigins.contains("*") || allowedOrigins.contains(origin));
+        boolean isOriginAllowed = origin != null && originMatches(origin, allowedOrigins);
         
         // CRITIQUE: Pour les requêtes OPTIONS, TOUJOURS ajouter les en-têtes CORS et répondre immédiatement
         if (isOptionsRequest) {
@@ -129,5 +129,25 @@ public class CustomCorsFilter extends OncePerRequestFilter {
         
         log.info("Origines CORS parsées dans CustomCorsFilter: {}", origins);
         return origins;
+    }
+
+    /** Vérifie si l'origine correspond à une des origines autorisées (exact ou pattern comme https://*.vercel.app) */
+    private boolean originMatches(String origin, List<String> allowed) {
+        if (allowed.contains("*")) return true;
+        if (allowed.contains(origin)) return true;
+        for (String pattern : allowed) {
+            if (pattern.contains("*")) {
+                if (matchesPattern(origin, pattern)) return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean matchesPattern(String origin, String pattern) {
+        int star = pattern.indexOf('*');
+        if (star < 0) return origin.equals(pattern);
+        String prefix = pattern.substring(0, star);
+        String suffix = pattern.substring(star + 1);
+        return origin.startsWith(prefix) && origin.endsWith(suffix) && origin.length() >= prefix.length() + suffix.length();
     }
 }
