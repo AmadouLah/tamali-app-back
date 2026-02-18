@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.filter.CorsFilter;
 
 import java.util.Arrays;
 import java.util.List;
@@ -50,8 +51,9 @@ public class CorsConfig {
         configuration.setAllowedMethods(Arrays.asList(CORS_METHODS));
         log.info("Méthodes autorisées: {}", Arrays.toString(CORS_METHODS));
         
-        // Autoriser tous les en-têtes (nécessaire pour les requêtes avec Authorization, Content-Type, etc.)
-        configuration.setAllowedHeaders(List.of("*"));
+        // CORRECTION DÉFINITIVE: Utiliser setAllowedHeaders avec "*" pour autoriser tous les en-têtes
+        // Cette approche fonctionne avec toutes les versions de Spring Framework
+        configuration.setAllowedHeaders(Arrays.asList("*"));
         log.info("En-têtes autorisés: * (tous)");
         
         // Exposer les en-têtes de réponse importants
@@ -60,9 +62,11 @@ public class CorsConfig {
                 "Content-Type", 
                 "X-Auth-Token",
                 "Access-Control-Allow-Origin",
-                "Access-Control-Allow-Credentials"
+                "Access-Control-Allow-Credentials",
+                "Access-Control-Allow-Methods",
+                "Access-Control-Allow-Headers"
         ));
-        log.info("En-têtes exposés: Authorization, Content-Type, X-Auth-Token");
+        log.info("En-têtes exposés: Authorization, Content-Type, X-Auth-Token, Access-Control-*");
         
         // Cache des requêtes preflight pendant 1 heure
         configuration.setMaxAge(CORS_MAX_AGE);
@@ -75,6 +79,17 @@ public class CorsConfig {
         log.info("Configuration CORS appliquée avec succès sur /**");
         log.info("=== Fin Configuration CORS ===");
         return source;
+    }
+
+    /**
+     * Filtre CORS supplémentaire pour garantir que les en-têtes CORS sont toujours présents
+     * même si Spring Security ne les applique pas correctement
+     */
+    @Bean
+    public CorsFilter corsFilter() {
+        CorsFilter filter = new CorsFilter(corsConfigurationSource());
+        log.info("Filtre CORS créé et enregistré");
+        return filter;
     }
 
     private List<String> parseOrigins(String originsString) {

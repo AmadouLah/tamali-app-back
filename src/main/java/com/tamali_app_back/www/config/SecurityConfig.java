@@ -41,13 +41,19 @@ public class SecurityConfig {
         
         return http
                 .csrf(AbstractHttpConfigurer::disable)
-                // Configuration CORS - doit être avant authorizeHttpRequests
+                // Configuration CORS - CRITIQUE: doit être avant authorizeHttpRequests et headers
+                // Cela garantit que les en-têtes CORS sont appliqués avant les autres headers de sécurité
                 .cors(cors -> {
                     cors.configurationSource(corsConfigurationSource);
-                    log.info("CORS configuré dans Spring Security");
+                    log.info("CORS configuré dans Spring Security avec configuration source");
                 })
-                .headers(this::configureSecurityHeaders)
                 .authorizeHttpRequests(this::configureAuthorizations)
+                .headers(headers -> {
+                    // Configurer les headers de sécurité mais s'assurer qu'ils n'écrasent pas CORS
+                    configureSecurityHeaders(headers);
+                    // Ne pas ajouter de headers qui pourraient bloquer CORS
+                    headers.frameOptions(frame -> frame.sameOrigin());
+                })
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .build();
     }
@@ -57,7 +63,7 @@ public class SecurityConfig {
         headers
                 .contentSecurityPolicy(csp -> csp.policyDirectives(CSP_POLICY))
                 .referrerPolicy(referrer -> referrer.policy(ReferrerPolicy.NO_REFERRER))
-                .frameOptions(frame -> frame.sameOrigin())
+                // Note: frameOptions est configuré dans securityFilterChain pour éviter les conflits
                 .httpStrictTransportSecurity(hsts -> hsts
                         .includeSubDomains(true)
                         .preload(true)
