@@ -42,12 +42,12 @@ public class SecurityConfig {
         
         return http
                 .csrf(AbstractHttpConfigurer::disable)
-                // Configuration CORS - CRITIQUE: doit être avant authorizeHttpRequests et headers
-                // Cela garantit que les en-têtes CORS sont appliqués avant les autres headers de sécurité
-                .cors(cors -> {
-                    cors.configurationSource(corsConfigurationSource);
-                    log.info("CORS configuré dans Spring Security avec configuration source");
-                })
+                // DÉSACTIVER temporairement la configuration CORS de Spring Security
+                // car nous utilisons CustomCorsFilter qui s'exécute avant
+                // .cors(cors -> {
+                //     cors.configurationSource(corsConfigurationSource);
+                //     log.info("CORS configuré dans Spring Security avec configuration source");
+                // })
                 .authorizeHttpRequests(this::configureAuthorizations)
                 .headers(headers -> {
                     // Configurer les headers de sécurité mais s'assurer qu'ils n'écrasent pas CORS

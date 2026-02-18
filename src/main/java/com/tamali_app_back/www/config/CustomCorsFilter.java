@@ -41,21 +41,10 @@ public class CustomCorsFilter extends OncePerRequestFilter {
         
         // CRITIQUE: Pour les requêtes OPTIONS, TOUJOURS ajouter les en-têtes CORS et répondre immédiatement
         if (isOptionsRequest) {
-            // Pour les requêtes OPTIONS, toujours autoriser l'origine si elle est dans la liste
-            // ou utiliser l'origine de la requête si elle est valide
-            String responseOrigin = "*";
-            if (origin != null) {
-                if (allowedOrigins.contains("*") || allowedOrigins.contains(origin)) {
-                    responseOrigin = origin;
-                } else {
-                    // Même si l'origine n'est pas dans la liste, répondre avec l'origine de la requête
-                    // pour éviter les erreurs CORS côté navigateur
-                    responseOrigin = origin;
-                    log.warn("Origine non autorisée dans la config mais réponse avec cette origine: {}", origin);
-                }
-            } else if (!allowedOrigins.isEmpty() && !allowedOrigins.contains("*")) {
-                responseOrigin = allowedOrigins.get(0);
-            }
+            // Pour les requêtes OPTIONS, TOUJOURS utiliser l'origine de la requête si elle existe
+            // Sinon utiliser la première origine autorisée ou "*"
+            String responseOrigin = origin != null ? origin : 
+                (!allowedOrigins.isEmpty() && !allowedOrigins.contains("*") ? allowedOrigins.get(0) : "*");
             
             // Toujours ajouter les en-têtes CORS pour les requêtes OPTIONS
             response.setHeader("Access-Control-Allow-Origin", responseOrigin);
@@ -74,7 +63,8 @@ public class CustomCorsFilter extends OncePerRequestFilter {
                 "Access-Control-Allow-Origin, Access-Control-Allow-Credentials, " +
                 "Access-Control-Allow-Methods, Access-Control-Allow-Headers");
             
-            log.info("Requête OPTIONS (preflight) traitée IMMÉDIATEMENT - En-têtes CORS ajoutés avec Origin: {}", responseOrigin);
+            log.info("✅ Requête OPTIONS (preflight) traitée IMMÉDIATEMENT - En-têtes CORS ajoutés avec Origin: {}", responseOrigin);
+            log.info("✅ Réponse HTTP 200 OK envoyée pour OPTIONS");
             response.setStatus(HttpServletResponse.SC_OK);
             response.setContentLength(0);
             response.flushBuffer();
