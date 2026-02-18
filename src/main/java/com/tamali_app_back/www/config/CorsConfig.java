@@ -51,10 +51,34 @@ public class CorsConfig {
         configuration.setAllowedMethods(Arrays.asList(CORS_METHODS));
         log.info("Méthodes autorisées: {}", Arrays.toString(CORS_METHODS));
         
-        // CORRECTION DÉFINITIVE: Utiliser setAllowedHeaders avec "*" pour autoriser tous les en-têtes
-        // Cette approche fonctionne avec toutes les versions de Spring Framework
-        configuration.setAllowedHeaders(Arrays.asList("*"));
-        log.info("En-têtes autorisés: * (tous)");
+        // CORRECTION DÉFINITIVE: Liste explicite de tous les en-têtes nécessaires
+        // Cette approche garantit que tous les en-têtes sont autorisés, y compris ceux envoyés par Angular
+        List<String> allowedHeaders = Arrays.asList(
+                "Authorization",
+                "Content-Type",
+                "X-Requested-With",
+                "Accept",
+                "Origin",
+                "Access-Control-Request-Method",
+                "Access-Control-Request-Headers",
+                "X-Auth-Token",
+                "Cache-Control",
+                "Pragma",
+                "If-Modified-Since",
+                "If-None-Match",
+                "X-Forwarded-For",
+                "X-Forwarded-Proto",
+                "X-Forwarded-Host",
+                "sec-ch-ua",
+                "sec-ch-ua-mobile",
+                "sec-ch-ua-platform",
+                "sec-fetch-dest",
+                "sec-fetch-mode",
+                "sec-fetch-site",
+                "sec-fetch-user"
+        );
+        configuration.setAllowedHeaders(allowedHeaders);
+        log.info("En-têtes autorisés: {} (liste explicite complète)", allowedHeaders.size());
         
         // Exposer les en-têtes de réponse importants
         configuration.setExposedHeaders(Arrays.asList(
