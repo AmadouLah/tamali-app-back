@@ -20,6 +20,9 @@ import java.util.UUID;
 @RequestMapping("/api/service-requests")
 @RequiredArgsConstructor
 @Slf4j
+@CrossOrigin(origins = {"https://tamali.vercel.app", "http://localhost:4200"}, 
+             maxAge = 3600, 
+             allowCredentials = "true")
 public class ServiceRequestController {
 
     private static final String DEFAULT_ADMIN_EMAIL = "amadoulandoure004@gmail.com";
