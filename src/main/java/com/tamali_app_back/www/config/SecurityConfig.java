@@ -32,7 +32,7 @@ public class SecurityConfig {
     };
 
     // CSP modifiée pour permettre les requêtes CORS depuis le frontend
-    private static final String CSP_POLICY = "default-src 'self' https://tamali.vercel.app; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; connect-src 'self' https://tamali.onrender.com https://tamali.vercel.app";
+    private static final String CSP_POLICY = "default-src 'self' https://tamali.vercel.app; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; connect-src 'self' https://tamali-app-back.onrender.com https://tamali.vercel.app";
     private static final long HSTS_MAX_AGE = 31536000L;
 
     @Bean
