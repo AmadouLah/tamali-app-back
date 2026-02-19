@@ -41,7 +41,7 @@ public class ProductService {
     }
 
     @Transactional
-    public ProductDto create(UUID businessId, String name, String reference, UUID categoryId, BigDecimal unitPrice, boolean taxable, int initialQuantity) {
+    public ProductDto create(UUID businessId, String name, String reference, UUID categoryId, BigDecimal unitPrice, BigDecimal purchasePrice, boolean taxable, int initialQuantity) {
         Business business = businessRepository.findById(businessId).orElse(null);
         if (business == null) return null;
         ProductCategory category = null;
@@ -55,6 +55,7 @@ public class ProductService {
                 .name(name)
                 .reference(reference)
                 .unitPrice(unitPrice != null ? unitPrice : BigDecimal.ZERO)
+                .purchasePrice(purchasePrice)
                 .business(business)
                 .category(category)
                 .taxable(taxable)
@@ -72,7 +73,7 @@ public class ProductService {
     }
 
     @Transactional
-    public ProductDto update(UUID id, String name, String reference, UUID categoryId, BigDecimal unitPrice, Boolean taxable) {
+    public ProductDto update(UUID id, String name, String reference, UUID categoryId, BigDecimal unitPrice, BigDecimal purchasePrice, Boolean taxable) {
         Product p = productRepository.findById(id).orElse(null);
         if (p == null) return null;
         if (name != null) p.setName(name);
@@ -84,6 +85,7 @@ public class ProductService {
             }
         }
         if (unitPrice != null) p.setUnitPrice(unitPrice);
+        if (purchasePrice != null) p.setPurchasePrice(purchasePrice);
         if (taxable != null) p.setTaxable(taxable);
         return mapper.toDto(productRepository.save(p));
     }

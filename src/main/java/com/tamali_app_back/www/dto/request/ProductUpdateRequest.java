@@ -8,5 +8,6 @@ public record ProductUpdateRequest(
         String reference,
         UUID categoryId,
         BigDecimal unitPrice,
+        BigDecimal purchasePrice,
         Boolean taxable
 ) {}

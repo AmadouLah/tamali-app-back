@@ -11,6 +11,7 @@ public record ProductCreateRequest(
         String reference,
         UUID categoryId,
         @NotNull BigDecimal unitPrice,
+        BigDecimal purchasePrice,
         boolean taxable,
         int initialQuantity
 ) {}

@@ -32,6 +32,9 @@ public class Product extends SyncableEntity {
     @Column(nullable = false, precision = 19, scale = 4)
     private BigDecimal unitPrice;
 
+    @Column(precision = 19, scale = 4)
+    private BigDecimal purchasePrice;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "business_id", nullable = false)
     private Business business;

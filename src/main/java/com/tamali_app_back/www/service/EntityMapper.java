@@ -53,7 +53,7 @@ public class EntityMapper {
         if (e == null) return null;
         int qty = e.getStock() != null ? e.getStock().getQuantity() : 0;
         ProductCategory cat = e.getCategory();
-        return new ProductDto(e.getId(), e.getName(), e.getReference(), e.getUnitPrice(),
+        return new ProductDto(e.getId(), e.getName(), e.getReference(), e.getUnitPrice(), e.getPurchasePrice(),
                 e.getBusiness() != null ? e.getBusiness().getId() : null,
                 cat != null ? cat.getId() : null,
                 cat != null ? cat.getName() : null,
