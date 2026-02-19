@@ -476,9 +476,15 @@ public class UserService {
         String trimmedEmail = associateEmail.trim();
         log.debug("Tentative de création d'associé pour le propriétaire {} avec email: {}", ownerId, trimmedEmail);
         
-        // Vérifier d'abord que le propriétaire existe et n'est pas supprimé
+        // Vérifier d'abord que le propriétaire existe, n'est pas supprimé, et a le rôle BUSINESS_OWNER
         Query checkOwnerQuery = entityManager.createNativeQuery(
-            "SELECT id, email, business_id FROM users WHERE id = :ownerId AND deleted_at IS NULL LIMIT 1"
+            "SELECT u.id, u.email, u.business_id, " +
+            "COUNT(CASE WHEN r.name = 'BUSINESS_OWNER' THEN 1 END) as has_owner_role " +
+            "FROM users u " +
+            "LEFT JOIN user_roles ur ON ur.user_id = u.id " +
+            "LEFT JOIN roles r ON ur.role_id = r.id " +
+            "WHERE u.id = :ownerId AND u.deleted_at IS NULL " +
+            "GROUP BY u.id, u.email, u.business_id"
         );
         checkOwnerQuery.setParameter("ownerId", ownerId);
         Object[] ownerData;
@@ -492,7 +498,15 @@ public class UserService {
         }
         
         UUID ownerBusinessId = ownerData[2] != null ? (UUID) ownerData[2] : null;
+        Long hasOwnerRole = ownerData[3] != null ? ((Number) ownerData[3]).longValue() : 0L;
+        
+        if (hasOwnerRole == 0) {
+            log.warn("L'utilisateur {} n'a pas le rôle BUSINESS_OWNER", ownerId);
+            throw new BadRequestException("L'utilisateur spécifié n'est pas un propriétaire d'entreprise.");
+        }
+        
         if (ownerBusinessId == null) {
+            log.warn("Le propriétaire {} n'a pas d'entreprise associée", ownerId);
             throw new BadRequestException("Le propriétaire n'a pas d'entreprise associée.");
         }
         
@@ -500,23 +514,34 @@ public class UserService {
         cleanupOrphanedAssociatesForBusiness(ownerBusinessId);
         
         // Charger le propriétaire après le nettoyage
+        entityManager.clear();
         User owner = loadUserByIdWithoutInvalidRoles(ownerId)
-                .orElseThrow(() -> new ResourceNotFoundException("Propriétaire", ownerId));
+                .orElseThrow(() -> {
+                    log.error("Impossible de charger le propriétaire {} après vérification. Nettoyage des associés orphelins...", ownerId);
+                    cleanupOrphanedAssociates();
+                    return new ResourceNotFoundException("Propriétaire", ownerId);
+                });
         
         // Vérifier que c'est bien un BUSINESS_OWNER
         boolean isBusinessOwner = owner.getRoles().stream()
                 .anyMatch(role -> role.getType() == RoleType.BUSINESS_OWNER);
         if (!isBusinessOwner) {
+            log.warn("L'utilisateur {} n'a pas le rôle BUSINESS_OWNER (rôles: {})", 
+                    ownerId, owner.getRoles().stream().map(r -> r.getType().name()).collect(java.util.stream.Collectors.joining(", ")));
             throw new BadRequestException("L'utilisateur spécifié n'est pas un propriétaire d'entreprise.");
         }
         
         // Vérifier que le propriétaire a une entreprise
         if (owner.getBusiness() == null) {
+            log.warn("Le propriétaire {} n'a pas d'entreprise associée (business_id attendu: {})", ownerId, ownerBusinessId);
             throw new BadRequestException("Le propriétaire n'a pas d'entreprise associée.");
         }
         
         // Vérifier que l'entreprise a complété les 6 étapes
-        if (!businessService.hasCompletedAllSteps(owner.getBusiness().getId())) {
+        boolean hasCompletedSteps = businessService.hasCompletedAllSteps(owner.getBusiness().getId());
+        if (!hasCompletedSteps) {
+            log.warn("Le propriétaire {} n'a pas complété les 6 étapes pour l'entreprise {}", 
+                    ownerId, owner.getBusiness().getId());
             throw new BadRequestException("Le propriétaire doit compléter les 6 étapes de création de son entreprise avant de pouvoir ajouter un associé.");
         }
         
