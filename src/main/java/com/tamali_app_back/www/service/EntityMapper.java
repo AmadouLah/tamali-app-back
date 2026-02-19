@@ -75,43 +75,36 @@ public class EntityMapper {
     public SaleItemDto toDto(SaleItem e) {
         if (e == null) return null;
         UUID productId = null;
-        String name = null;
+        String name = "Produit supprimé";
+        
+        // Récupérer directement depuis la DB pour éviter les problèmes de lazy loading avec produits supprimés
+        // Cette approche évite complètement le problème car on ne passe pas par la relation Hibernate
+        // La requête récupère l'ID et le nom même si le produit est soft-deleted (deleted_at IS NOT NULL)
         try {
-            Product product = e.getProduct();
-            if (product != null) {
-                productId = product.getId();
-                name = product.getName();
-            }
-        } catch (org.hibernate.ObjectNotFoundException ex) {
-            // Produit supprimé (soft delete) : récupérer l'ID et le nom depuis la DB sans restriction
-            try {
-                @SuppressWarnings("unchecked")
-                java.util.List<Object[]> results = entityManager.createNativeQuery(
-                    "SELECT si.product_id, p.name FROM sale_items si " +
-                    "LEFT JOIN products p ON si.product_id = p.id " +
-                    "WHERE si.id = :saleItemId"
-                ).setParameter("saleItemId", e.getId())
-                 .getResultList();
-                
-                if (results != null && !results.isEmpty()) {
-                    Object[] result = results.get(0);
-                    if (result != null && result.length >= 2) {
-                        productId = result[0] != null ? (UUID) result[0] : null;
-                        name = result[1] != null ? (String) result[1] : "Produit supprimé";
-                        if (name == null || name.isEmpty()) {
-                            name = "Produit supprimé";
-                        }
-                    } else {
-                        name = "Produit supprimé";
+            @SuppressWarnings("unchecked")
+            java.util.List<Object[]> results = entityManager.createNativeQuery(
+                "SELECT si.product_id, " +
+                "       CASE WHEN p.deleted_at IS NULL THEN p.name ELSE 'Produit supprimé' END as product_name " +
+                "FROM sale_items si " +
+                "LEFT JOIN products p ON si.product_id = p.id " +
+                "WHERE si.id = :saleItemId"
+            ).setParameter("saleItemId", e.getId())
+             .getResultList();
+            
+            if (results != null && !results.isEmpty()) {
+                Object[] result = results.get(0);
+                if (result != null && result.length >= 2) {
+                    productId = result[0] != null ? (UUID) result[0] : null;
+                    String dbName = result[1] != null ? (String) result[1] : null;
+                    if (dbName != null && !dbName.isEmpty()) {
+                        name = dbName;
                     }
-                } else {
-                    name = "Produit supprimé";
                 }
-            } catch (Exception dbEx) {
-                // Si la requête échoue, on utilise un nom par défaut
-                name = "Produit supprimé";
             }
+        } catch (Exception ex) {
+            // En cas d'erreur, on garde les valeurs par défaut (productId null, name "Produit supprimé")
         }
+        
         return new SaleItemDto(e.getId(), productId, name, e.getQuantity(), e.getPrice());
     }
 
