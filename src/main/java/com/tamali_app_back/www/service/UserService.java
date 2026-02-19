@@ -110,19 +110,24 @@ public class UserService {
         Role associateRole = roleRepository.findByType(RoleType.BUSINESS_ASSOCIATE)
                 .orElseThrow(() -> new IllegalStateException("Rôle BUSINESS_ASSOCIATE introuvable."));
         
+        log.debug("Recherche des associés pour l'entreprise: {} avec le rôle ID: {}", businessId, associateRole.getId());
+        
+        // Utiliser le nom du rôle directement dans la requête pour plus de robustesse
         Query nativeQuery = entityManager.createNativeQuery(
             "SELECT DISTINCT u.id, u.firstname, u.lastname, u.email, u.enabled, u.business_id, " +
             "u.must_change_password, u.created_at, u.updated_at, u.version, u.deleted_at " +
             "FROM users u " +
             "JOIN user_roles ur ON ur.user_id = u.id " +
-            "WHERE ur.role_id = :roleId AND u.business_id = :businessId AND u.deleted_at IS NULL " +
+            "JOIN roles r ON ur.role_id = r.id " +
+            "WHERE r.name = 'BUSINESS_ASSOCIATE' AND u.business_id = :businessId AND u.deleted_at IS NULL " +
             "ORDER BY u.created_at DESC"
         );
-        nativeQuery.setParameter("roleId", associateRole.getId());
         nativeQuery.setParameter("businessId", businessId);
         
         @SuppressWarnings("unchecked")
         List<Object[]> results = nativeQuery.getResultList();
+        
+        log.info("Trouvé {} associés pour l'entreprise {}", results.size(), businessId);
         
         return results.stream()
                 .map(result -> {
@@ -140,6 +145,7 @@ public class UserService {
                             .mustChangePassword(result[6] != null && ((Boolean) result[6]))
                             .build();
                     user.setRoles(roles);
+                    log.debug("Associé trouvé: {} (ID: {}) avec {} rôles", result[3], userId, roles.size());
                     return mapper.toDto(user);
                 })
                 .collect(Collectors.toList());
@@ -482,15 +488,27 @@ public class UserService {
             String temporaryPassword = generateTemporaryPassword();
             String encodedPassword = passwordEncoder.encode(temporaryPassword);
             
-            // Ajouter le rôle et mettre à jour l'entreprise et le mot de passe
-            Query insertRoleQuery = entityManager.createNativeQuery(
-                "INSERT INTO user_roles (user_id, role_id) " +
-                "SELECT :userId, :roleId " +
-                "WHERE NOT EXISTS (SELECT 1 FROM user_roles WHERE user_id = :userId AND role_id = :roleId)"
+            // Vérifier d'abord si le rôle existe déjà
+            Query checkRoleQuery = entityManager.createNativeQuery(
+                "SELECT COUNT(*) FROM user_roles WHERE user_id = :userId AND role_id = :roleId"
             );
-            insertRoleQuery.setParameter("userId", existingUser.getId());
-            insertRoleQuery.setParameter("roleId", associateRole.getId());
-            insertRoleQuery.executeUpdate();
+            checkRoleQuery.setParameter("userId", existingUser.getId());
+            checkRoleQuery.setParameter("roleId", associateRole.getId());
+            Long existingRoleCount = ((Number) checkRoleQuery.getSingleResult()).longValue();
+            
+            // Ajouter le rôle et mettre à jour l'entreprise et le mot de passe
+            if (existingRoleCount == 0) {
+                Query insertRoleQuery = entityManager.createNativeQuery(
+                    "INSERT INTO user_roles (user_id, role_id) VALUES (:userId, :roleId)"
+                );
+                insertRoleQuery.setParameter("userId", existingUser.getId());
+                insertRoleQuery.setParameter("roleId", associateRole.getId());
+                int rowsInserted = insertRoleQuery.executeUpdate();
+                log.info("Rôle BUSINESS_ASSOCIATE ajouté pour l'utilisateur existant {}: {} lignes insérées", 
+                        existingUser.getId(), rowsInserted);
+            } else {
+                log.info("Le rôle BUSINESS_ASSOCIATE existe déjà pour l'utilisateur existant {}", existingUser.getId());
+            }
             
             Query updateQuery = entityManager.createNativeQuery(
                 "UPDATE users SET business_id = :businessId, password = :password, " +
@@ -507,6 +525,20 @@ public class UserService {
                 throw new ResourceNotFoundException("Utilisateur", existingUser.getId());
             }
             
+            // Forcer le flush pour s'assurer que les modifications sont persistées
+            entityManager.flush();
+            
+            // Vérifier que le rôle est bien persisté
+            Query verifyRoleQuery = entityManager.createNativeQuery(
+                "SELECT COUNT(*) FROM user_roles ur " +
+                "JOIN roles r ON ur.role_id = r.id " +
+                "WHERE ur.user_id = :userId AND r.name = 'BUSINESS_ASSOCIATE'"
+            );
+            verifyRoleQuery.setParameter("userId", existingUser.getId());
+            Long verifiedRoleCount = ((Number) verifyRoleQuery.getSingleResult()).longValue();
+            log.info("Vérification finale pour utilisateur existant: {} rôles BUSINESS_ASSOCIATE trouvés pour l'utilisateur {}", 
+                    verifiedRoleCount, existingUser.getId());
+            
             sendTemporaryPasswordEmail(trimmedEmail, temporaryPassword);
             
             entityManager.clear();
@@ -520,6 +552,9 @@ public class UserService {
         // Créer un nouvel utilisateur associé
         Role associateRole = roleRepository.findByType(RoleType.BUSINESS_ASSOCIATE)
                 .orElseThrow(() -> new IllegalStateException("Rôle BUSINESS_ASSOCIATE introuvable."));
+        
+        log.info("Création d'un associé avec email: {} pour l'entreprise: {} avec le rôle: {}", 
+                trimmedEmail, owner.getBusiness().getId(), associateRole.getId());
         
         String temporaryPassword = generateTemporaryPassword();
         String encodedPassword = passwordEncoder.encode(temporaryPassword);
@@ -537,23 +572,48 @@ public class UserService {
         try {
             User savedAssociate = userRepository.save(associate);
             associateId = savedAssociate.getId();
+            log.info("Utilisateur associé sauvegardé avec ID: {}", associateId);
             
             // Forcer le flush pour s'assurer que l'utilisateur est persisté
             entityManager.flush();
+            log.info("Flush effectué pour l'utilisateur: {}", associateId);
             
-            // Insérer explicitement le rôle dans la table user_roles avec une requête native
-            // pour garantir la persistance même après redémarrage du serveur
-            Query insertRoleQuery = entityManager.createNativeQuery(
-                "INSERT INTO user_roles (user_id, role_id) " +
-                "SELECT :userId, :roleId " +
-                "WHERE NOT EXISTS (SELECT 1 FROM user_roles WHERE user_id = :userId AND role_id = :roleId)"
+            // Vérifier d'abord si le rôle existe déjà dans user_roles
+            Query checkRoleQuery = entityManager.createNativeQuery(
+                "SELECT COUNT(*) FROM user_roles WHERE user_id = :userId AND role_id = :roleId"
             );
-            insertRoleQuery.setParameter("userId", associateId);
-            insertRoleQuery.setParameter("roleId", associateRole.getId());
-            insertRoleQuery.executeUpdate();
+            checkRoleQuery.setParameter("userId", associateId);
+            checkRoleQuery.setParameter("roleId", associateRole.getId());
+            Long existingRoleCount = ((Number) checkRoleQuery.getSingleResult()).longValue();
+            
+            if (existingRoleCount == 0) {
+                // Insérer explicitement le rôle dans la table user_roles avec une requête native
+                // pour garantir la persistance même après redémarrage du serveur
+                Query insertRoleQuery = entityManager.createNativeQuery(
+                    "INSERT INTO user_roles (user_id, role_id) VALUES (:userId, :roleId)"
+                );
+                insertRoleQuery.setParameter("userId", associateId);
+                insertRoleQuery.setParameter("roleId", associateRole.getId());
+                int rowsInserted = insertRoleQuery.executeUpdate();
+                log.info("Rôle BUSINESS_ASSOCIATE inséré dans user_roles pour l'utilisateur {}: {} lignes insérées", 
+                        associateId, rowsInserted);
+            } else {
+                log.info("Le rôle BUSINESS_ASSOCIATE existe déjà pour l'utilisateur {}", associateId);
+            }
             
             // Forcer un nouveau flush pour s'assurer que le rôle est bien persisté
             entityManager.flush();
+            
+            // Vérifier que le rôle est bien persisté
+            Query verifyRoleQuery = entityManager.createNativeQuery(
+                "SELECT COUNT(*) FROM user_roles ur " +
+                "JOIN roles r ON ur.role_id = r.id " +
+                "WHERE ur.user_id = :userId AND r.name = 'BUSINESS_ASSOCIATE'"
+            );
+            verifyRoleQuery.setParameter("userId", associateId);
+            Long verifiedRoleCount = ((Number) verifyRoleQuery.getSingleResult()).longValue();
+            log.info("Vérification finale: {} rôles BUSINESS_ASSOCIATE trouvés pour l'utilisateur {}", 
+                    verifiedRoleCount, associateId);
             
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
             log.warn("Violation de contrainte détectée pour {}, chargement de l'utilisateur existant", trimmedEmail);
