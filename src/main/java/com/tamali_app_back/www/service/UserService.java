@@ -571,6 +571,15 @@ public class UserService {
             User existingUser = loadUserByIdWithoutInvalidRoles(finalFoundUserId)
                     .orElseThrow(() -> new ResourceNotFoundException("Utilisateur", finalFoundUserId));
             
+            // Vérifier d'abord si l'utilisateur a le rôle BUSINESS_OWNER - on ne peut pas transformer un propriétaire en associé
+            boolean existingUserIsOwner = existingUser.getRoles().stream()
+                    .anyMatch(role -> role.getType() == RoleType.BUSINESS_OWNER);
+            
+            if (existingUserIsOwner) {
+                log.warn("L'utilisateur {} a déjà le rôle BUSINESS_OWNER. Impossible de le transformer en associé.", trimmedEmail);
+                throw new BadRequestException("Cet utilisateur est déjà un propriétaire d'entreprise. Un propriétaire ne peut pas être associé.");
+            }
+            
             // Vérifier si l'utilisateur a déjà le rôle BUSINESS_ASSOCIATE pour cette entreprise
             boolean hasAssociateRole = existingUser.getRoles().stream()
                     .anyMatch(role -> role.getType() == RoleType.BUSINESS_ASSOCIATE);
@@ -585,38 +594,58 @@ public class UserService {
             // Vérifier si l'utilisateur est déjà associé à une autre entreprise
             if (hasAssociateRole && existingUser.getBusiness() != null && 
                     !existingUser.getBusiness().getId().equals(owner.getBusiness().getId())) {
+                log.warn("L'utilisateur {} est déjà associé à une autre entreprise (business_id: {})", 
+                        trimmedEmail, existingUser.getBusiness().getId());
                 throw new BadRequestException("Cet utilisateur est déjà associé à une autre entreprise. Un associé ne peut être lié qu'à une seule entreprise.");
             }
             
+            // Si l'utilisateur existe mais n'a pas le rôle BUSINESS_ASSOCIATE, c'est peut-être un utilisateur normal
+            // On peut le transformer en associé seulement s'il n'a pas d'autres rôles métier
+            boolean hasOtherBusinessRoles = existingUser.getRoles().stream()
+                    .anyMatch(role -> role.getType() == RoleType.SUPER_ADMIN || role.getType() == RoleType.BUSINESS_OWNER);
+            
+            if (hasOtherBusinessRoles) {
+                log.warn("L'utilisateur {} a d'autres rôles métier. Impossible de le transformer en associé.", trimmedEmail);
+                throw new BadRequestException("Cet utilisateur a déjà d'autres rôles dans le système. Impossible de le transformer en associé.");
+            }
+            
             // Si l'utilisateur existe mais n'a pas le rôle ou n'est pas lié à la bonne entreprise
+            // C'est probablement un associé orphelin ou un utilisateur normal qu'on veut transformer en associé
+            log.info("Réassociation de l'utilisateur existant {} (ID: {}) comme associé pour l'entreprise {}", 
+                    trimmedEmail, existingUser.getId(), owner.getBusiness().getId());
+            
             Role associateRole = roleRepository.findByType(RoleType.BUSINESS_ASSOCIATE)
                     .orElseThrow(() -> new IllegalStateException("Rôle BUSINESS_ASSOCIATE introuvable."));
             
             String temporaryPassword = generateTemporaryPassword();
             String encodedPassword = passwordEncoder.encode(temporaryPassword);
             
-            // Vérifier d'abord si le rôle existe déjà
-            Query checkRoleQuery = entityManager.createNativeQuery(
-                "SELECT COUNT(*) FROM user_roles WHERE user_id = :userId AND role_id = :roleId"
+            // Nettoyer d'abord les anciens rôles BUSINESS_ASSOCIATE s'ils existent (au cas où l'utilisateur était un associé orphelin)
+            Query deleteOldAssociateRolesQuery = entityManager.createNativeQuery(
+                "DELETE FROM user_roles ur " +
+                "USING roles r " +
+                "WHERE ur.user_id = :userId " +
+                "AND ur.role_id = r.id " +
+                "AND r.name = 'BUSINESS_ASSOCIATE'"
             );
-            checkRoleQuery.setParameter("userId", existingUser.getId());
-            checkRoleQuery.setParameter("roleId", associateRole.getId());
-            Long existingRoleCount = ((Number) checkRoleQuery.getSingleResult()).longValue();
-            
-            // Ajouter le rôle et mettre à jour l'entreprise et le mot de passe
-            if (existingRoleCount == 0) {
-                Query insertRoleQuery = entityManager.createNativeQuery(
-                    "INSERT INTO user_roles (user_id, role_id) VALUES (:userId, :roleId)"
-                );
-                insertRoleQuery.setParameter("userId", existingUser.getId());
-                insertRoleQuery.setParameter("roleId", associateRole.getId());
-                int rowsInserted = insertRoleQuery.executeUpdate();
-                log.info("Rôle BUSINESS_ASSOCIATE ajouté pour l'utilisateur existant {}: {} lignes insérées", 
-                        existingUser.getId(), rowsInserted);
-            } else {
-                log.info("Le rôle BUSINESS_ASSOCIATE existe déjà pour l'utilisateur existant {}", existingUser.getId());
+            deleteOldAssociateRolesQuery.setParameter("userId", existingUser.getId());
+            int deletedOldRoles = deleteOldAssociateRolesQuery.executeUpdate();
+            if (deletedOldRoles > 0) {
+                log.info("Anciens rôles BUSINESS_ASSOCIATE supprimés pour l'utilisateur {}: {} rôles supprimés", 
+                        existingUser.getId(), deletedOldRoles);
             }
             
+            // Ajouter le rôle BUSINESS_ASSOCIATE
+            Query insertRoleQuery = entityManager.createNativeQuery(
+                "INSERT INTO user_roles (user_id, role_id) VALUES (:userId, :roleId)"
+            );
+            insertRoleQuery.setParameter("userId", existingUser.getId());
+            insertRoleQuery.setParameter("roleId", associateRole.getId());
+            int rowsInserted = insertRoleQuery.executeUpdate();
+            log.info("Rôle BUSINESS_ASSOCIATE ajouté pour l'utilisateur existant {}: {} lignes insérées", 
+                    existingUser.getId(), rowsInserted);
+            
+            // Mettre à jour l'entreprise, le mot de passe et réinitialiser les flags
             Query updateQuery = entityManager.createNativeQuery(
                 "UPDATE users SET business_id = :businessId, password = :password, " +
                 "must_change_password = true, enabled = true, updated_at = :updatedAt " +
@@ -629,8 +658,11 @@ public class UserService {
             int updated = updateQuery.executeUpdate();
             
             if (updated == 0) {
+                log.error("Impossible de mettre à jour l'utilisateur {} pour le transformer en associé", existingUser.getId());
                 throw new ResourceNotFoundException("Utilisateur", existingUser.getId());
             }
+            
+            log.info("Utilisateur {} réassocié avec succès à l'entreprise {}", trimmedEmail, owner.getBusiness().getId());
             
             // Forcer le flush pour s'assurer que les modifications sont persistées
             entityManager.flush();
