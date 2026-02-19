@@ -162,6 +162,16 @@ public class UserController {
     }
 
     /**
+     * Restaure les rôles BUSINESS_ASSOCIATE manquants pour une entreprise.
+     * Utile pour corriger les problèmes de persistance après redémarrage.
+     */
+    @PostMapping("/business/{businessId}/restore-associate-roles")
+    public ResponseEntity<String> restoreAssociateRoles(@PathVariable UUID businessId) {
+        int restored = userService.restoreMissingAssociateRoles(businessId);
+        return ResponseEntity.ok("Rôles restaurés: " + restored + " utilisateurs mis à jour");
+    }
+
+    /**
      * Supprime définitivement le compte d'un utilisateur.
      */
     @DeleteMapping("/{id}")
