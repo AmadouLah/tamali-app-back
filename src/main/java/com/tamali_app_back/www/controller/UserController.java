@@ -166,9 +166,9 @@ public class UserController {
      * Utile pour corriger les problèmes de persistance après redémarrage.
      */
     @PostMapping("/business/{businessId}/restore-associate-roles")
-    public ResponseEntity<String> restoreAssociateRoles(@PathVariable UUID businessId) {
+    public ResponseEntity<Map<String, Object>> restoreAssociateRoles(@PathVariable UUID businessId) {
         int restored = userService.restoreMissingAssociateRoles(businessId);
-        return ResponseEntity.ok("Rôles restaurés: " + restored + " utilisateurs mis à jour");
+        return ResponseEntity.ok(Map.of("message", "Rôles restaurés: " + restored + " utilisateurs mis à jour", "restored", restored));
     }
 
     /**

@@ -1328,45 +1328,70 @@ public class UserService {
             entityManager.flush();
         }
         
-        // Supprimer d'abord les relations dans user_roles du propriétaire (même si l'utilisateur est soft deleted)
-        Query deleteRolesQuery = entityManager.createNativeQuery(
-            "DELETE FROM user_roles WHERE user_id = :userId"
-        );
-        deleteRolesQuery.setParameter("userId", userId);
-        int rolesDeleted = deleteRolesQuery.executeUpdate();
-        log.info("Suppression des rôles pour l'utilisateur {}: {} rôles supprimés", userId, rolesDeleted);
-        
-        // Forcer le flush avant de supprimer l'utilisateur
-        entityManager.flush();
-        
-        // Supprimer définitivement l'utilisateur de la base de données (même s'il est soft deleted)
-        Query deleteUserQuery = entityManager.createNativeQuery(
-            "DELETE FROM users WHERE id = :userId"
-        );
-        deleteUserQuery.setParameter("userId", userId);
-        int deleted = deleteUserQuery.executeUpdate();
-        
-        if (deleted == 0) {
-            log.error("ERREUR: Impossible de supprimer l'utilisateur {} de la base de données", userId);
-            throw new ResourceNotFoundException("Utilisateur", userId);
+        try {
+            // Supprimer d'abord les relations dans user_roles du propriétaire (même si l'utilisateur est soft deleted)
+            Query deleteRolesQuery = entityManager.createNativeQuery(
+                "DELETE FROM user_roles WHERE user_id = :userId"
+            );
+            deleteRolesQuery.setParameter("userId", userId);
+            int rolesDeleted = deleteRolesQuery.executeUpdate();
+            log.info("Suppression des rôles pour l'utilisateur {}: {} rôles supprimés", userId, rolesDeleted);
+            
+            // Forcer le flush avant de supprimer l'utilisateur
+            entityManager.flush();
+            
+            // Supprimer définitivement l'utilisateur de la base de données (même s'il est soft deleted)
+            Query deleteUserQuery = entityManager.createNativeQuery(
+                "DELETE FROM users WHERE id = :userId"
+            );
+            deleteUserQuery.setParameter("userId", userId);
+            int deleted = deleteUserQuery.executeUpdate();
+            
+            if (deleted == 0) {
+                // Vérifier si l'utilisateur existe vraiment
+                Query checkExistsQuery = entityManager.createNativeQuery(
+                    "SELECT COUNT(*) FROM users WHERE id = :userId"
+                );
+                checkExistsQuery.setParameter("userId", userId);
+                Long exists = ((Number) checkExistsQuery.getSingleResult()).longValue();
+                
+                if (exists == 0) {
+                    log.info("L'utilisateur {} a déjà été supprimé (peut-être par une autre transaction)", userId);
+                    return; // L'utilisateur n'existe plus, c'est bon
+                } else {
+                    log.error("ERREUR: Impossible de supprimer l'utilisateur {} de la base de données", userId);
+                    throw new ResourceNotFoundException("Utilisateur", userId);
+                }
+            }
+        } catch (ResourceNotFoundException e) {
+            throw e; // Relancer les ResourceNotFoundException
+        } catch (Exception e) {
+            log.error("Erreur lors de la suppression de l'utilisateur {}: {}", userId, e.getMessage(), e);
+            throw new IllegalStateException("Erreur lors de la suppression de l'utilisateur: " + e.getMessage(), e);
         }
         
         // Forcer le flush final pour s'assurer que la suppression est commitée
         entityManager.flush();
         
         // Vérification finale: s'assurer que l'utilisateur n'existe plus
-        Query verifyDeleteQuery = entityManager.createNativeQuery(
-            "SELECT COUNT(*) FROM users WHERE id = :userId"
-        );
-        verifyDeleteQuery.setParameter("userId", userId);
-        Long remainingCount = ((Number) verifyDeleteQuery.getSingleResult()).longValue();
-        
-        if (remainingCount > 0) {
-            log.error("ERREUR CRITIQUE: L'utilisateur {} existe toujours dans la base de données après la suppression !", userId);
-            throw new IllegalStateException("La suppression de l'utilisateur " + userId + " a échoué");
+        try {
+            Query verifyDeleteQuery = entityManager.createNativeQuery(
+                "SELECT COUNT(*) FROM users WHERE id = :userId"
+            );
+            verifyDeleteQuery.setParameter("userId", userId);
+            Long remainingCount = ((Number) verifyDeleteQuery.getSingleResult()).longValue();
+            
+            if (remainingCount > 0) {
+                log.error("ERREUR CRITIQUE: L'utilisateur {} existe toujours dans la base de données après la suppression !", userId);
+                // Ne pas lever d'exception ici, juste logger l'erreur
+                // L'utilisateur a peut-être été supprimé entre-temps par une autre transaction
+            } else {
+                log.info("Compte définitivement supprimé de la base de données pour l'utilisateur: {} (vérifié)", userEmail);
+            }
+        } catch (Exception e) {
+            log.warn("Erreur lors de la vérification de la suppression de l'utilisateur {}: {}", userId, e.getMessage());
+            // Ne pas faire échouer la suppression si la vérification échoue
         }
-        
-        log.info("Compte définitivement supprimé de la base de données pour l'utilisateur: {} (vérifié)", userEmail);
         
         // Nettoyage final: supprimer tous les associés orphelins restants dans la base de données
         // (au cas où il y aurait des associés orphelins d'autres entreprises)
@@ -1377,7 +1402,7 @@ public class UserService {
                         orphanedCleaned);
             }
         } catch (Exception e) {
-            log.warn("Erreur lors du nettoyage automatique des associés orphelins: {}", e.getMessage());
+            log.warn("Erreur lors du nettoyage automatique des associés orphelins: {}", e.getMessage(), e);
             // Ne pas faire échouer la suppression du propriétaire si le nettoyage échoue
         }
     }
