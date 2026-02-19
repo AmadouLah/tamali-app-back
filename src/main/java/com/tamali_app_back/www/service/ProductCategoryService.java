@@ -2,9 +2,11 @@ package com.tamali_app_back.www.service;
 
 import com.tamali_app_back.www.dto.ProductCategoryDto;
 import com.tamali_app_back.www.entity.Business;
+import com.tamali_app_back.www.entity.Product;
 import com.tamali_app_back.www.entity.ProductCategory;
 import com.tamali_app_back.www.repository.BusinessRepository;
 import com.tamali_app_back.www.repository.ProductCategoryRepository;
+import com.tamali_app_back.www.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +20,7 @@ import java.util.UUID;
 public class ProductCategoryService {
 
     private final ProductCategoryRepository productCategoryRepository;
+    private final ProductRepository productRepository;
     private final BusinessRepository businessRepository;
     private final EntityMapper mapper;
 
@@ -34,6 +37,11 @@ public class ProductCategoryService {
         return productCategoryRepository.findById(id)
                 .map(this::toDto)
                 .orElse(null);
+    }
+
+    @Transactional(readOnly = true)
+    public long countProductsByCategoryId(UUID categoryId) {
+        return productRepository.countByCategoryId(categoryId);
     }
 
     @Transactional
@@ -58,7 +66,17 @@ public class ProductCategoryService {
     @Transactional
     public void deleteById(UUID id) {
         productCategoryRepository.findById(id).ifPresent(cat -> {
-            cat.setDeletedAt(LocalDateTime.now());
+            LocalDateTime now = LocalDateTime.now();
+            // Supprimer tous les produits de cette catégorie
+            List<Product> products = productRepository.findByCategoryId(id);
+            for (Product product : products) {
+                if (product.getDeletedAt() == null) {
+                    product.setDeletedAt(now);
+                    productRepository.save(product);
+                }
+            }
+            // Supprimer la catégorie
+            cat.setDeletedAt(now);
             productCategoryRepository.save(cat);
         });
     }

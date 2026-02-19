@@ -33,6 +33,12 @@ public class ProductCategoryController {
         return ResponseEntity.ok(dto);
     }
 
+    @GetMapping("/product-categories/{id}/products-count")
+    public ResponseEntity<Long> getProductsCount(@PathVariable UUID id) {
+        long count = productCategoryService.countProductsByCategoryId(id);
+        return ResponseEntity.ok(count);
+    }
+
     @PostMapping("/businesses/{businessId}/product-categories")
     public ResponseEntity<ProductCategoryDto> create(
             @PathVariable UUID businessId,

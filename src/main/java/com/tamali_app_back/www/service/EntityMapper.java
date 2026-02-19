@@ -2,12 +2,18 @@ package com.tamali_app_back.www.service;
 
 import com.tamali_app_back.www.dto.*;
 import com.tamali_app_back.www.entity.*;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import org.springframework.stereotype.Component;
 
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Component
 public class EntityMapper {
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     public BusinessDto toDto(Business e) {
         if (e == null) return null;
@@ -68,8 +74,45 @@ public class EntityMapper {
 
     public SaleItemDto toDto(SaleItem e) {
         if (e == null) return null;
-        String name = e.getProduct() != null ? e.getProduct().getName() : null;
-        return new SaleItemDto(e.getId(), e.getProduct() != null ? e.getProduct().getId() : null, name, e.getQuantity(), e.getPrice());
+        UUID productId = null;
+        String name = null;
+        try {
+            Product product = e.getProduct();
+            if (product != null) {
+                productId = product.getId();
+                name = product.getName();
+            }
+        } catch (org.hibernate.ObjectNotFoundException ex) {
+            // Produit supprimé (soft delete) : récupérer l'ID et le nom depuis la DB sans restriction
+            try {
+                @SuppressWarnings("unchecked")
+                java.util.List<Object[]> results = entityManager.createNativeQuery(
+                    "SELECT si.product_id, p.name FROM sale_items si " +
+                    "LEFT JOIN products p ON si.product_id = p.id " +
+                    "WHERE si.id = :saleItemId"
+                ).setParameter("saleItemId", e.getId())
+                 .getResultList();
+                
+                if (results != null && !results.isEmpty()) {
+                    Object[] result = results.get(0);
+                    if (result != null && result.length >= 2) {
+                        productId = result[0] != null ? (UUID) result[0] : null;
+                        name = result[1] != null ? (String) result[1] : "Produit supprimé";
+                        if (name == null || name.isEmpty()) {
+                            name = "Produit supprimé";
+                        }
+                    } else {
+                        name = "Produit supprimé";
+                    }
+                } else {
+                    name = "Produit supprimé";
+                }
+            } catch (Exception dbEx) {
+                // Si la requête échoue, on utilise un nom par défaut
+                name = "Produit supprimé";
+            }
+        }
+        return new SaleItemDto(e.getId(), productId, name, e.getQuantity(), e.getPrice());
     }
 
     public SaleDto toDto(Sale e) {
