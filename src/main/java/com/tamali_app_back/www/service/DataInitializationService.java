@@ -272,7 +272,7 @@ public class DataInitializationService implements CommandLineRunner {
                             "WHERE ur.user_id = u.id " +
                             "AND ur.role_id = r.id " +
                             "AND UPPER(u.email) = UPPER(:email) " +
-                            "AND r.name NOT IN ('SUPER_ADMIN', 'BUSINESS_OWNER')");
+                            "AND r.name NOT IN ('SUPER_ADMIN', 'BUSINESS_OWNER', 'BUSINESS_ASSOCIATE')");
             query.setParameter("email", email);
             int deleted = query.executeUpdate();
             if (deleted > 0) {

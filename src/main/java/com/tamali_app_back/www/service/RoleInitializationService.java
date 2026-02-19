@@ -26,11 +26,12 @@ public class RoleInitializationService implements CommandLineRunner {
             transactionTemplate.executeWithoutResult(status -> {
                 try {
                     // D'abord supprimer les références dans user_roles pour les rôles invalides
+                    // IMPORTANT: Ne PAS supprimer BUSINESS_ASSOCIATE qui est un rôle valide !
                     Query deleteUserRolesQuery = entityManager.createNativeQuery(
                         "DELETE FROM user_roles ur " +
                         "USING roles r " +
                         "WHERE ur.role_id = r.id " +
-                        "AND r.name NOT IN ('SUPER_ADMIN', 'BUSINESS_OWNER')"
+                        "AND r.name NOT IN ('SUPER_ADMIN', 'BUSINESS_OWNER', 'BUSINESS_ASSOCIATE')"
                     );
                     int deletedUserRoles = deleteUserRolesQuery.executeUpdate();
                     if (deletedUserRoles > 0) {
@@ -38,8 +39,9 @@ public class RoleInitializationService implements CommandLineRunner {
                     }
                     
                     // Ensuite supprimer les rôles invalides
+                    // IMPORTANT: Ne PAS supprimer BUSINESS_ASSOCIATE qui est un rôle valide !
                     Query deleteRolesQuery = entityManager.createNativeQuery(
-                        "DELETE FROM roles WHERE name NOT IN ('SUPER_ADMIN', 'BUSINESS_OWNER')"
+                        "DELETE FROM roles WHERE name NOT IN ('SUPER_ADMIN', 'BUSINESS_OWNER', 'BUSINESS_ASSOCIATE')"
                     );
                     int deletedRoles = deleteRolesQuery.executeUpdate();
                     if (deletedRoles > 0) {

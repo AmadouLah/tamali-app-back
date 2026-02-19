@@ -705,6 +705,38 @@ public class UserService {
             log.info("Test de récupération: {} associés trouvés avec la requête de récupération pour l'utilisateur {}", 
                     testRetrievalCount, associateId);
             
+            // IMPORTANT: Forcer un commit explicite en vidant le cache et en rechargant depuis la base
+            // Cela garantit que toutes les modifications sont bien persistées
+            entityManager.clear();
+            entityManager.flush();
+            
+            // Vérifier une dernière fois après le clear que le rôle est toujours là
+            Query finalCheckQuery = entityManager.createNativeQuery(
+                "SELECT COUNT(*) FROM user_roles WHERE user_id = :userId AND role_id = :roleId"
+            );
+            finalCheckQuery.setParameter("userId", associateId);
+            finalCheckQuery.setParameter("roleId", associateRole.getId());
+            Long finalCheckCount = ((Number) finalCheckQuery.getSingleResult()).longValue();
+            log.info("Vérification finale après clear: {} rôles trouvés dans user_roles pour l'utilisateur {}", 
+                    finalCheckCount, associateId);
+            
+            if (finalCheckCount == 0) {
+                log.error("ERREUR CRITIQUE: Le rôle a disparu après le clear ! Nouvelle insertion...");
+                // Dernière tentative d'insertion
+                Query emergencyInsertQuery = entityManager.createNativeQuery(
+                    "INSERT INTO user_roles (user_id, role_id) VALUES (:userId, :roleId)"
+                );
+                emergencyInsertQuery.setParameter("userId", associateId);
+                emergencyInsertQuery.setParameter("roleId", associateRole.getId());
+                try {
+                    int emergencyRows = emergencyInsertQuery.executeUpdate();
+                    entityManager.flush();
+                    log.info("Insertion d'urgence: {} lignes insérées", emergencyRows);
+                } catch (Exception emergencyEx) {
+                    log.error("ÉCHEC de l'insertion d'urgence: {}", emergencyEx.getMessage());
+                }
+            }
+            
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
             log.warn("Violation de contrainte détectée pour {}, chargement de l'utilisateur existant", trimmedEmail);
             entityManager.clear();
@@ -990,22 +1022,25 @@ public class UserService {
     /**
      * Supprime définitivement le compte d'un utilisateur de la base de données (hard delete).
      * Fonctionne même si l'utilisateur est déjà soft deleted.
+     * Si l'utilisateur est un propriétaire d'entreprise, supprime également tous ses associés.
      */
     @Transactional
     public void deleteAccount(UUID userId) {
         entityManager.clear();
         
-        // Vérifier si l'utilisateur existe (actif ou supprimé)
+        // Vérifier si l'utilisateur existe (actif ou supprimé) et récupérer ses informations
         Query checkUserQuery = entityManager.createNativeQuery(
-            "SELECT email FROM users WHERE id = :userId LIMIT 1"
+            "SELECT email, business_id FROM users WHERE id = :userId LIMIT 1"
         );
         checkUserQuery.setParameter("userId", userId);
         
         String userEmail = null;
+        UUID businessId = null;
         try {
-            Object result = checkUserQuery.getSingleResult();
-            if (result != null) {
-                userEmail = (String) result;
+            Object[] result = (Object[]) checkUserQuery.getSingleResult();
+            if (result != null && result[0] != null) {
+                userEmail = (String) result[0];
+                businessId = result[1] != null ? (UUID) result[1] : null;
             }
         } catch (jakarta.persistence.NoResultException e) {
             throw new ResourceNotFoundException("Utilisateur", userId);
@@ -1015,7 +1050,74 @@ public class UserService {
             throw new ResourceNotFoundException("Utilisateur", userId);
         }
         
-        // Supprimer d'abord les relations dans user_roles (même si l'utilisateur est soft deleted)
+        // Vérifier si l'utilisateur est un propriétaire d'entreprise
+        Role businessOwnerRole = roleRepository.findByType(RoleType.BUSINESS_OWNER)
+                .orElseThrow(() -> new IllegalStateException("Rôle BUSINESS_OWNER introuvable."));
+        
+        Query checkOwnerRoleQuery = entityManager.createNativeQuery(
+            "SELECT COUNT(*) FROM user_roles WHERE user_id = :userId AND role_id = :roleId"
+        );
+        checkOwnerRoleQuery.setParameter("userId", userId);
+        checkOwnerRoleQuery.setParameter("roleId", businessOwnerRole.getId());
+        Long isOwner = ((Number) checkOwnerRoleQuery.getSingleResult()).longValue();
+        
+        // Si c'est un propriétaire d'entreprise avec un business_id, supprimer tous ses associés
+        if (isOwner > 0 && businessId != null) {
+            log.info("Suppression du propriétaire d'entreprise {} (business_id: {}). Suppression de tous les associés...", 
+                    userEmail, businessId);
+            
+            // Trouver tous les associés de cette entreprise
+            Role associateRole = roleRepository.findByType(RoleType.BUSINESS_ASSOCIATE)
+                    .orElseThrow(() -> new IllegalStateException("Rôle BUSINESS_ASSOCIATE introuvable."));
+            
+            Query findAssociatesQuery = entityManager.createNativeQuery(
+                "SELECT u.id, u.email " +
+                "FROM users u " +
+                "JOIN user_roles ur ON ur.user_id = u.id " +
+                "JOIN roles r ON ur.role_id = r.id " +
+                "WHERE r.name = 'BUSINESS_ASSOCIATE' AND u.business_id = :businessId AND u.deleted_at IS NULL"
+            );
+            findAssociatesQuery.setParameter("businessId", businessId);
+            @SuppressWarnings("unchecked")
+            List<Object[]> associates = findAssociatesQuery.getResultList();
+            
+            log.info("Trouvé {} associés à supprimer pour l'entreprise {}", associates.size(), businessId);
+            
+            // Supprimer chaque associé
+            for (Object[] associateRow : associates) {
+                UUID associateId = (UUID) associateRow[0];
+                String associateEmail = (String) associateRow[1];
+                
+                try {
+                    // Supprimer les relations dans user_roles
+                    Query deleteAssociateRolesQuery = entityManager.createNativeQuery(
+                        "DELETE FROM user_roles WHERE user_id = :associateId"
+                    );
+                    deleteAssociateRolesQuery.setParameter("associateId", associateId);
+                    deleteAssociateRolesQuery.executeUpdate();
+                    
+                    // Supprimer définitivement l'associé
+                    Query deleteAssociateQuery = entityManager.createNativeQuery(
+                        "DELETE FROM users WHERE id = :associateId"
+                    );
+                    deleteAssociateQuery.setParameter("associateId", associateId);
+                    int deletedAssociate = deleteAssociateQuery.executeUpdate();
+                    
+                    if (deletedAssociate > 0) {
+                        log.info("Associé supprimé: {} (ID: {})", associateEmail, associateId);
+                    }
+                } catch (Exception e) {
+                    log.error("Erreur lors de la suppression de l'associé {} ({}): {}", 
+                            associateEmail, associateId, e.getMessage());
+                    // Continuer avec les autres associés même en cas d'erreur
+                }
+            }
+            
+            entityManager.flush();
+            log.info("Tous les associés de l'entreprise {} ont été supprimés", businessId);
+        }
+        
+        // Supprimer d'abord les relations dans user_roles du propriétaire (même si l'utilisateur est soft deleted)
         Query deleteRolesQuery = entityManager.createNativeQuery(
             "DELETE FROM user_roles WHERE user_id = :userId"
         );
