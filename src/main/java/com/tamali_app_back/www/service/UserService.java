@@ -84,13 +84,16 @@ public class UserService {
         return results.stream()
                 .map(result -> {
                     UUID userId = (UUID) result[0];
+                    UUID ownerBusinessId = result[5] != null ? (UUID) result[5] : null;
                     Set<Role> roles = loadValidRoles(userId);
+                    Business business = ownerBusinessId != null ? businessRepository.findById(ownerBusinessId).orElse(null) : null;
                     User user = User.builder()
                             .id(userId)
                             .firstname((String) result[1])
                             .lastname((String) result[2])
                             .email((String) result[3])
                             .enabled((Boolean) result[4])
+                            .business(business)
                             .mustChangePassword(result[6] != null && ((Boolean) result[6]))
                             .build();
                     user.setRoles(roles);
