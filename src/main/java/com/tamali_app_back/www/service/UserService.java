@@ -110,7 +110,45 @@ public class UserService {
         Role associateRole = roleRepository.findByType(RoleType.BUSINESS_ASSOCIATE)
                 .orElseThrow(() -> new IllegalStateException("Rôle BUSINESS_ASSOCIATE introuvable."));
         
-        log.debug("Recherche des associés pour l'entreprise: {} avec le rôle ID: {}", businessId, associateRole.getId());
+        log.info("Recherche des associés pour l'entreprise: {} avec le rôle ID: {} (nom: BUSINESS_ASSOCIATE)", 
+                businessId, associateRole.getId());
+        
+        // Diagnostic: Vérifier combien d'utilisateurs ont le business_id
+        Query diagnosticQuery = entityManager.createNativeQuery(
+            "SELECT COUNT(*) FROM users WHERE business_id = :businessId AND deleted_at IS NULL"
+        );
+        diagnosticQuery.setParameter("businessId", businessId);
+        Long totalUsersWithBusiness = ((Number) diagnosticQuery.getSingleResult()).longValue();
+        log.info("Diagnostic: {} utilisateurs trouvés avec business_id = {}", totalUsersWithBusiness, businessId);
+        
+        // Diagnostic: Vérifier combien d'utilisateurs ont le rôle BUSINESS_ASSOCIATE
+        Query diagnosticRoleQuery = entityManager.createNativeQuery(
+            "SELECT COUNT(*) FROM users u " +
+            "JOIN user_roles ur ON ur.user_id = u.id " +
+            "JOIN roles r ON ur.role_id = r.id " +
+            "WHERE r.name = 'BUSINESS_ASSOCIATE' AND u.deleted_at IS NULL"
+        );
+        Long totalAssociates = ((Number) diagnosticRoleQuery.getSingleResult()).longValue();
+        log.info("Diagnostic: {} utilisateurs au total ont le rôle BUSINESS_ASSOCIATE dans toute la base", totalAssociates);
+        
+        // Diagnostic: Vérifier les utilisateurs avec ce business_id et leurs rôles
+        Query diagnosticBusinessRoleQuery = entityManager.createNativeQuery(
+            "SELECT u.id, u.email, r.name " +
+            "FROM users u " +
+            "LEFT JOIN user_roles ur ON ur.user_id = u.id " +
+            "LEFT JOIN roles r ON ur.role_id = r.id " +
+            "WHERE u.business_id = :businessId AND u.deleted_at IS NULL"
+        );
+        diagnosticBusinessRoleQuery.setParameter("businessId", businessId);
+        @SuppressWarnings("unchecked")
+        List<Object[]> diagnosticResults = diagnosticBusinessRoleQuery.getResultList();
+        log.info("Diagnostic: Détails des utilisateurs avec business_id = {}:", businessId);
+        for (Object[] row : diagnosticResults) {
+            log.info("  - Utilisateur ID: {}, Email: {}, Rôle: {}", row[0], row[1], row[2]);
+        }
+        
+        // Vérifier et restaurer les rôles manquants pour les utilisateurs qui devraient être des associés
+        restoreMissingAssociateRoles(businessId, associateRole.getId());
         
         // Utiliser le nom du rôle directement dans la requête pour plus de robustesse
         Query nativeQuery = entityManager.createNativeQuery(
@@ -145,7 +183,7 @@ public class UserService {
                             .mustChangePassword(result[6] != null && ((Boolean) result[6]))
                             .build();
                     user.setRoles(roles);
-                    log.debug("Associé trouvé: {} (ID: {}) avec {} rôles", result[3], userId, roles.size());
+                    log.info("Associé trouvé: {} (ID: {}) avec {} rôles", result[3], userId, roles.size());
                     return mapper.toDto(user);
                 })
                 .collect(Collectors.toList());
@@ -570,6 +608,7 @@ public class UserService {
         
         UUID associateId;
         try {
+            // Sauvegarder l'utilisateur d'abord
             User savedAssociate = userRepository.save(associate);
             associateId = savedAssociate.getId();
             log.info("Utilisateur associé sauvegardé avec ID: {}", associateId);
@@ -578,31 +617,48 @@ public class UserService {
             entityManager.flush();
             log.info("Flush effectué pour l'utilisateur: {}", associateId);
             
-            // Vérifier d'abord si le rôle existe déjà dans user_roles
+            // IMPORTANT: Insérer TOUJOURS le rôle explicitement avec une requête native
+            // pour garantir la persistance même si Hibernate ne le fait pas correctement
+            Query insertRoleQuery = entityManager.createNativeQuery(
+                "INSERT INTO user_roles (user_id, role_id) " +
+                "SELECT :userId, :roleId " +
+                "WHERE NOT EXISTS (SELECT 1 FROM user_roles WHERE user_id = :userId AND role_id = :roleId)"
+            );
+            insertRoleQuery.setParameter("userId", associateId);
+            insertRoleQuery.setParameter("roleId", associateRole.getId());
+            int rowsInserted = insertRoleQuery.executeUpdate();
+            log.info("Rôle BUSINESS_ASSOCIATE inséré dans user_roles pour l'utilisateur {}: {} lignes insérées", 
+                    associateId, rowsInserted);
+            
+            // Forcer un nouveau flush pour s'assurer que le rôle est bien persisté
+            entityManager.flush();
+            
+            // Vérifier immédiatement que le rôle est bien dans la base
             Query checkRoleQuery = entityManager.createNativeQuery(
                 "SELECT COUNT(*) FROM user_roles WHERE user_id = :userId AND role_id = :roleId"
             );
             checkRoleQuery.setParameter("userId", associateId);
             checkRoleQuery.setParameter("roleId", associateRole.getId());
             Long existingRoleCount = ((Number) checkRoleQuery.getSingleResult()).longValue();
+            log.info("Vérification immédiate: {} rôles trouvés dans user_roles pour l'utilisateur {}", 
+                    existingRoleCount, associateId);
             
             if (existingRoleCount == 0) {
-                // Insérer explicitement le rôle dans la table user_roles avec une requête native
-                // pour garantir la persistance même après redémarrage du serveur
-                Query insertRoleQuery = entityManager.createNativeQuery(
+                log.error("ERREUR CRITIQUE: Le rôle n'a pas été persisté ! Nouvelle tentative d'insertion...");
+                // Réessayer avec une insertion directe sans WHERE NOT EXISTS
+                Query retryInsertQuery = entityManager.createNativeQuery(
                     "INSERT INTO user_roles (user_id, role_id) VALUES (:userId, :roleId)"
                 );
-                insertRoleQuery.setParameter("userId", associateId);
-                insertRoleQuery.setParameter("roleId", associateRole.getId());
-                int rowsInserted = insertRoleQuery.executeUpdate();
-                log.info("Rôle BUSINESS_ASSOCIATE inséré dans user_roles pour l'utilisateur {}: {} lignes insérées", 
-                        associateId, rowsInserted);
-            } else {
-                log.info("Le rôle BUSINESS_ASSOCIATE existe déjà pour l'utilisateur {}", associateId);
+                retryInsertQuery.setParameter("userId", associateId);
+                retryInsertQuery.setParameter("roleId", associateRole.getId());
+                try {
+                    int retryRows = retryInsertQuery.executeUpdate();
+                    entityManager.flush();
+                    log.info("Réessai d'insertion: {} lignes insérées", retryRows);
+                } catch (Exception e) {
+                    log.error("Erreur lors de la réinsertion du rôle: {}", e.getMessage());
+                }
             }
-            
-            // Forcer un nouveau flush pour s'assurer que le rôle est bien persisté
-            entityManager.flush();
             
             // Vérifier que le rôle est bien persisté
             Query verifyRoleQuery = entityManager.createNativeQuery(
@@ -614,6 +670,28 @@ public class UserService {
             Long verifiedRoleCount = ((Number) verifyRoleQuery.getSingleResult()).longValue();
             log.info("Vérification finale: {} rôles BUSINESS_ASSOCIATE trouvés pour l'utilisateur {}", 
                     verifiedRoleCount, associateId);
+            
+            // Vérifier que le business_id est bien stocké
+            Query verifyBusinessQuery = entityManager.createNativeQuery(
+                "SELECT business_id FROM users WHERE id = :userId AND deleted_at IS NULL"
+            );
+            verifyBusinessQuery.setParameter("userId", associateId);
+            Object businessIdResult = verifyBusinessQuery.getSingleResult();
+            log.info("Vérification business_id: business_id = {} pour l'utilisateur {} (attendu: {})", 
+                    businessIdResult, associateId, owner.getBusiness().getId());
+            
+            // Vérification complète: l'associé peut-il être trouvé avec la requête de récupération?
+            Query testRetrievalQuery = entityManager.createNativeQuery(
+                "SELECT COUNT(*) FROM users u " +
+                "JOIN user_roles ur ON ur.user_id = u.id " +
+                "JOIN roles r ON ur.role_id = r.id " +
+                "WHERE r.name = 'BUSINESS_ASSOCIATE' AND u.business_id = :businessId AND u.id = :userId AND u.deleted_at IS NULL"
+            );
+            testRetrievalQuery.setParameter("businessId", owner.getBusiness().getId());
+            testRetrievalQuery.setParameter("userId", associateId);
+            Long testRetrievalCount = ((Number) testRetrievalQuery.getSingleResult()).longValue();
+            log.info("Test de récupération: {} associés trouvés avec la requête de récupération pour l'utilisateur {}", 
+                    testRetrievalCount, associateId);
             
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
             log.warn("Violation de contrainte détectée pour {}, chargement de l'utilisateur existant", trimmedEmail);
@@ -1459,6 +1537,55 @@ public class UserService {
         }
         log.warn("Type inattendu pour conversion en LocalDateTime: {}", value.getClass().getName());
         return null;
+    }
+
+    /**
+     * Restaure les rôles BUSINESS_ASSOCIATE manquants pour les utilisateurs d'une entreprise.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void restoreMissingAssociateRoles(UUID businessId, UUID associateRoleId) {
+        try {
+            // Trouver les utilisateurs qui ont le business_id mais pas le rôle BUSINESS_ASSOCIATE et ne sont pas des propriétaires
+            Query findMissingQuery = entityManager.createNativeQuery(
+                "SELECT u.id, u.email " +
+                "FROM users u " +
+                "WHERE u.business_id = :businessId " +
+                "AND u.deleted_at IS NULL " +
+                "AND u.id NOT IN (" +
+                "  SELECT ur.user_id FROM user_roles ur " +
+                "  JOIN roles r ON ur.role_id = r.id " +
+                "  WHERE r.name IN ('BUSINESS_OWNER', 'BUSINESS_ASSOCIATE')" +
+                ")"
+            );
+            findMissingQuery.setParameter("businessId", businessId);
+            @SuppressWarnings("unchecked")
+            List<Object[]> missingUsers = findMissingQuery.getResultList();
+            
+            if (!missingUsers.isEmpty()) {
+                log.warn("Trouvé {} utilisateurs avec business_id {} mais sans rôle BUSINESS_ASSOCIATE. Restauration...", 
+                        missingUsers.size(), businessId);
+                
+                for (Object[] userRow : missingUsers) {
+                    UUID userId = (UUID) userRow[0];
+                    String userEmail = (String) userRow[1];
+                    
+                    Query insertQuery = entityManager.createNativeQuery(
+                        "INSERT INTO user_roles (user_id, role_id) " +
+                        "SELECT :userId, :roleId " +
+                        "WHERE NOT EXISTS (SELECT 1 FROM user_roles WHERE user_id = :userId AND role_id = :roleId)"
+                    );
+                    insertQuery.setParameter("userId", userId);
+                    insertQuery.setParameter("roleId", associateRoleId);
+                    int rowsInserted = insertQuery.executeUpdate();
+                    entityManager.flush();
+                    log.info("Rôle BUSINESS_ASSOCIATE restauré pour l'utilisateur {} ({}): {} lignes insérées", 
+                            userEmail, userId, rowsInserted);
+                }
+            }
+        } catch (Exception e) {
+            log.error("Erreur lors de la restauration des rôles BUSINESS_ASSOCIATE pour l'entreprise {}: {}", 
+                    businessId, e.getMessage());
+        }
     }
 
     /**
