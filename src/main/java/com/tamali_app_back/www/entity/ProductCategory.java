@@ -7,17 +7,18 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
-import java.math.BigDecimal;
 import java.util.UUID;
 
 @Entity
-@Table(name = "products")
+@Table(name = "product_categories", uniqueConstraints = {
+    @UniqueConstraint(columnNames = { "business_id", "name" })
+})
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 @EqualsAndHashCode(callSuper = false, onlyExplicitlyIncluded = true)
-public class Product extends SyncableEntity {
+public class ProductCategory extends SyncableEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -27,21 +28,7 @@ public class Product extends SyncableEntity {
     @Column(nullable = false)
     private String name;
 
-    private String reference;
-
-    @Column(nullable = false, precision = 19, scale = 4)
-    private BigDecimal unitPrice;
-
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "business_id", nullable = false)
     private Business business;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "category_id")
-    private ProductCategory category;
-
-    @OneToOne(mappedBy = "product")
-    private Stock stock;
-
-    private boolean taxable;
 }

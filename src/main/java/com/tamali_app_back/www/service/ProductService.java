@@ -5,6 +5,7 @@ import com.tamali_app_back.www.dto.StockMovementDto;
 import com.tamali_app_back.www.entity.*;
 import com.tamali_app_back.www.enums.MovementType;
 import com.tamali_app_back.www.repository.BusinessRepository;
+import com.tamali_app_back.www.repository.ProductCategoryRepository;
 import com.tamali_app_back.www.repository.ProductRepository;
 import com.tamali_app_back.www.repository.StockMovementRepository;
 import com.tamali_app_back.www.repository.StockRepository;
@@ -22,6 +23,7 @@ import java.util.UUID;
 public class ProductService {
 
     private final ProductRepository productRepository;
+    private final ProductCategoryRepository productCategoryRepository;
     private final StockRepository stockRepository;
     private final StockMovementRepository stockMovementRepository;
     private final StockMovementService stockMovementService;
@@ -39,14 +41,22 @@ public class ProductService {
     }
 
     @Transactional
-    public ProductDto create(UUID businessId, String name, String reference, BigDecimal unitPrice, boolean taxable, int initialQuantity) {
+    public ProductDto create(UUID businessId, String name, String reference, UUID categoryId, BigDecimal unitPrice, boolean taxable, int initialQuantity) {
         Business business = businessRepository.findById(businessId).orElse(null);
         if (business == null) return null;
+        ProductCategory category = null;
+        if (categoryId != null) {
+            category = productCategoryRepository.findById(categoryId).orElse(null);
+            if (category != null && !category.getBusiness().getId().equals(businessId)) {
+                category = null;
+            }
+        }
         Product p = Product.builder()
                 .name(name)
                 .reference(reference)
                 .unitPrice(unitPrice != null ? unitPrice : BigDecimal.ZERO)
                 .business(business)
+                .category(category)
                 .taxable(taxable)
                 .build();
         p = productRepository.save(p);
@@ -62,11 +72,17 @@ public class ProductService {
     }
 
     @Transactional
-    public ProductDto update(UUID id, String name, String reference, BigDecimal unitPrice, Boolean taxable) {
+    public ProductDto update(UUID id, String name, String reference, UUID categoryId, BigDecimal unitPrice, Boolean taxable) {
         Product p = productRepository.findById(id).orElse(null);
         if (p == null) return null;
         if (name != null) p.setName(name);
         if (reference != null) p.setReference(reference);
+        if (categoryId != null) {
+            ProductCategory category = productCategoryRepository.findById(categoryId).orElse(null);
+            if (category != null && p.getBusiness() != null && category.getBusiness().getId().equals(p.getBusiness().getId())) {
+                p.setCategory(category);
+            }
+        }
         if (unitPrice != null) p.setUnitPrice(unitPrice);
         if (taxable != null) p.setTaxable(taxable);
         return mapper.toDto(productRepository.save(p));

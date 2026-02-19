@@ -39,7 +39,7 @@ public class ProductController {
             @PathVariable UUID businessId,
             @Valid @RequestBody ProductCreateRequest request) {
         ProductDto dto = productService.create(
-                businessId, request.name(), request.reference(), request.unitPrice(),
+                businessId, request.name(), request.reference(), request.categoryId(), request.unitPrice(),
                 request.taxable(), request.initialQuantity());
         if (dto == null) throw new BadRequestException("Business introuvable.");
         return ResponseEntity.status(HttpStatus.CREATED).body(dto);
@@ -48,7 +48,7 @@ public class ProductController {
     @PatchMapping("/products/{id}")
     public ResponseEntity<ProductDto> update(@PathVariable UUID id, @RequestBody ProductUpdateRequest request) {
         ProductDto dto = ResponseUtil.requireFound(productService.update(id,
-                request.name(), request.reference(), request.unitPrice(), request.taxable()), "Produit", id);
+                request.name(), request.reference(), request.categoryId(), request.unitPrice(), request.taxable()), "Produit", id);
         return ResponseEntity.ok(dto);
     }
 

@@ -9,6 +9,8 @@ public record ProductDto(
         String reference,
         BigDecimal unitPrice,
         UUID businessId,
+        UUID categoryId,
+        String categoryName,
         Integer stockQuantity,
         boolean taxable
 ) {}
