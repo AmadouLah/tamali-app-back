@@ -153,6 +153,15 @@ public class UserController {
     }
 
     /**
+     * Retire le rôle BUSINESS_ASSOCIATE d'un utilisateur (le retire en tant qu'associé).
+     */
+    @DeleteMapping("/{id}/associate")
+    public ResponseEntity<UserDto> removeAssociateRole(@PathVariable UUID id) {
+        UserDto dto = userService.removeAssociateRole(id);
+        return ResponseEntity.ok(dto);
+    }
+
+    /**
      * Supprime définitivement le compte d'un utilisateur.
      */
     @DeleteMapping("/{id}")

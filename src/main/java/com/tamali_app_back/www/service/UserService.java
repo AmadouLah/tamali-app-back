@@ -469,6 +469,12 @@ public class UserService {
                 return mapper.toDto(existingUser);
             }
             
+            // Vérifier si l'utilisateur est déjà associé à une autre entreprise
+            if (hasAssociateRole && existingUser.getBusiness() != null && 
+                    !existingUser.getBusiness().getId().equals(owner.getBusiness().getId())) {
+                throw new BadRequestException("Cet utilisateur est déjà associé à une autre entreprise. Un associé ne peut être lié qu'à une seule entreprise.");
+            }
+            
             // Si l'utilisateur existe mais n'a pas le rôle ou n'est pas lié à la bonne entreprise
             Role associateRole = roleRepository.findByType(RoleType.BUSINESS_ASSOCIATE)
                     .orElseThrow(() -> new IllegalStateException("Rôle BUSINESS_ASSOCIATE introuvable."));
@@ -713,6 +719,58 @@ public class UserService {
         user.setEnabled(enabled);
         log.info("Compte {} pour l'utilisateur: {}", enabled ? "activé" : "désactivé", user.getEmail());
         return mapper.toDto(user);
+    }
+
+    /**
+     * Retire le rôle BUSINESS_ASSOCIATE d'un utilisateur (le retire en tant qu'associé).
+     * Ne supprime pas le compte utilisateur, seulement le rôle d'associé.
+     */
+    @Transactional
+    public UserDto removeAssociateRole(UUID associateId) {
+        entityManager.clear();
+        
+        User associate = loadUserByIdWithoutInvalidRoles(associateId)
+                .orElseThrow(() -> new ResourceNotFoundException("Associé", associateId));
+        
+        // Vérifier que l'utilisateur a bien le rôle BUSINESS_ASSOCIATE
+        boolean hasAssociateRole = associate.getRoles().stream()
+                .anyMatch(role -> role.getType() == RoleType.BUSINESS_ASSOCIATE);
+        
+        if (!hasAssociateRole) {
+            throw new BadRequestException("Cet utilisateur n'est pas un associé.");
+        }
+        
+        Role associateRole = roleRepository.findByType(RoleType.BUSINESS_ASSOCIATE)
+                .orElseThrow(() -> new IllegalStateException("Rôle BUSINESS_ASSOCIATE introuvable."));
+        
+        // Retirer le rôle BUSINESS_ASSOCIATE
+        Query deleteRoleQuery = entityManager.createNativeQuery(
+            "DELETE FROM user_roles WHERE user_id = :userId AND role_id = :roleId"
+        );
+        deleteRoleQuery.setParameter("userId", associateId);
+        deleteRoleQuery.setParameter("roleId", associateRole.getId());
+        int deleted = deleteRoleQuery.executeUpdate();
+        
+        if (deleted == 0) {
+            throw new BadRequestException("Impossible de retirer le rôle d'associé.");
+        }
+        
+        // Mettre à jour le business_id à null car l'utilisateur n'est plus associé à une entreprise
+        Query updateBusinessQuery = entityManager.createNativeQuery(
+            "UPDATE users SET business_id = NULL, updated_at = :updatedAt " +
+            "WHERE id = :userId AND deleted_at IS NULL"
+        );
+        updateBusinessQuery.setParameter("updatedAt", Timestamp.valueOf(LocalDateTime.now()));
+        updateBusinessQuery.setParameter("userId", associateId);
+        updateBusinessQuery.executeUpdate();
+        
+        // Recharger l'utilisateur pour retourner les données à jour
+        entityManager.clear();
+        User updatedUser = loadUserByIdWithoutInvalidRoles(associateId)
+                .orElseThrow(() -> new ResourceNotFoundException("Utilisateur", associateId));
+        
+        log.info("Rôle d'associé retiré pour l'utilisateur: {}", updatedUser.getEmail());
+        return mapper.toDto(updatedUser);
     }
 
     /**
