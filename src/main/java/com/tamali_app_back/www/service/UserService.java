@@ -619,6 +619,11 @@ public class UserService {
             throw new BadRequestException("Ce compte n'a pas besoin de changer son mot de passe.");
         }
 
+        // Sauvegarder les informations importantes avant la mise à jour
+        boolean hadAssociateRole = user.getRoles().stream()
+                .anyMatch(role -> role.getType() == RoleType.BUSINESS_ASSOCIATE);
+        UUID businessId = user.getBusiness() != null ? user.getBusiness().getId() : null;
+
         String encodedNewPassword = passwordEncoder.encode(newPassword);
         
         Query updateQuery = entityManager.createNativeQuery(
@@ -634,8 +639,53 @@ public class UserService {
             throw new ResourceNotFoundException("Utilisateur", userId);
         }
 
-        user.setPassword(encodedNewPassword);
-        user.setMustChangePassword(false);
+        // S'assurer que le rôle BUSINESS_ASSOCIATE est toujours présent si l'utilisateur l'avait avant
+        // et qu'il a toujours un business_id associé
+        if (hadAssociateRole && businessId != null) {
+            Role associateRole = roleRepository.findByType(RoleType.BUSINESS_ASSOCIATE)
+                    .orElseThrow(() -> new IllegalStateException("Rôle BUSINESS_ASSOCIATE introuvable."));
+            
+            // Vérifier et restaurer le rôle BUSINESS_ASSOCIATE si nécessaire
+            Query checkRoleQuery = entityManager.createNativeQuery(
+                "SELECT COUNT(*) FROM user_roles WHERE user_id = :userId AND role_id = :roleId"
+            );
+            checkRoleQuery.setParameter("userId", userId);
+            checkRoleQuery.setParameter("roleId", associateRole.getId());
+            Long roleCount = ((Number) checkRoleQuery.getSingleResult()).longValue();
+            
+            if (roleCount == 0) {
+                // Le rôle a été perdu, le restaurer
+                Query insertRoleQuery = entityManager.createNativeQuery(
+                    "INSERT INTO user_roles (user_id, role_id) VALUES (:userId, :roleId)"
+                );
+                insertRoleQuery.setParameter("userId", userId);
+                insertRoleQuery.setParameter("roleId", associateRole.getId());
+                insertRoleQuery.executeUpdate();
+                entityManager.flush();
+                log.warn("Rôle BUSINESS_ASSOCIATE restauré pour l'utilisateur {} après changement de mot de passe", user.getEmail());
+            }
+            
+            // S'assurer que le business_id est toujours présent
+            Query checkBusinessQuery = entityManager.createNativeQuery(
+                "SELECT business_id FROM users WHERE id = :userId AND deleted_at IS NULL"
+            );
+            checkBusinessQuery.setParameter("userId", userId);
+            Object businessIdResult = checkBusinessQuery.getSingleResult();
+            
+            if (businessIdResult == null || !businessIdResult.equals(businessId)) {
+                // Le business_id a été perdu, le restaurer
+                Query updateBusinessQuery = entityManager.createNativeQuery(
+                    "UPDATE users SET business_id = :businessId, updated_at = :updatedAt " +
+                    "WHERE id = :userId AND deleted_at IS NULL"
+                );
+                updateBusinessQuery.setParameter("businessId", businessId);
+                updateBusinessQuery.setParameter("updatedAt", Timestamp.valueOf(LocalDateTime.now()));
+                updateBusinessQuery.setParameter("userId", userId);
+                updateBusinessQuery.executeUpdate();
+                entityManager.flush();
+                log.warn("business_id restauré pour l'utilisateur {} après changement de mot de passe", user.getEmail());
+            }
+        }
 
         // Recharger l'utilisateur pour s'assurer que toutes les données sont à jour (rôles, business, etc.)
         entityManager.clear();
