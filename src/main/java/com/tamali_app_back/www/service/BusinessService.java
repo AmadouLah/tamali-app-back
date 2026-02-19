@@ -156,4 +156,47 @@ public class BusinessService {
         business.setReceiptTemplate(template);
         return mapper.toDto(businessRepository.save(business));
     }
+
+    /**
+     * Vérifie si une entreprise a complété les 6 étapes de création.
+     * Étape 1: name et sectorId
+     * Étape 2: address, phone, country
+     * Étape 3: commerceRegisterNumber, identificationNumber (optionnels)
+     * Étape 4: legalStatus (requis)
+     * Étape 5: logoUrl (optionnel)
+     * Étape 6: receiptTemplateId (requis)
+     */
+    @Transactional(readOnly = true)
+    public boolean hasCompletedAllSteps(UUID businessId) {
+        Business business = businessRepository.findById(businessId)
+                .orElseThrow(() -> new ResourceNotFoundException("Entreprise", businessId));
+        
+        // Étape 1: name et sectorId
+        if (business.getName() == null || business.getName().trim().isEmpty() || business.getSector() == null) {
+            return false;
+        }
+        
+        // Étape 2: address, phone, country
+        if (business.getAddress() == null || business.getAddress().trim().isEmpty() ||
+            business.getPhone() == null || business.getPhone().trim().isEmpty() ||
+            business.getCountry() == null || business.getCountry().trim().isEmpty()) {
+            return false;
+        }
+        
+        // Étape 3: commerceRegisterNumber, identificationNumber (optionnels, donc pas de vérification)
+        
+        // Étape 4: legalStatus (requis)
+        if (business.getLegalStatus() == null) {
+            return false;
+        }
+        
+        // Étape 5: logoUrl (optionnel, donc pas de vérification)
+        
+        // Étape 6: receiptTemplateId (requis)
+        if (business.getReceiptTemplate() == null) {
+            return false;
+        }
+        
+        return true;
+    }
 }

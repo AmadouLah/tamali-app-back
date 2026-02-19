@@ -3,6 +3,7 @@ package com.tamali_app_back.www.controller;
 import com.tamali_app_back.www.dto.UserDto;
 import com.tamali_app_back.www.dto.request.ChangeTemporaryPasswordRequest;
 import com.tamali_app_back.www.dto.request.ConfirmCodeRequest;
+import com.tamali_app_back.www.dto.request.CreateAssociateRequest;
 import com.tamali_app_back.www.dto.request.CreateBusinessOwnerRequest;
 import com.tamali_app_back.www.dto.request.UserCreateRequest;
 import com.tamali_app_back.www.exception.BadRequestException;
@@ -46,6 +47,14 @@ public class UserController {
         return ResponseEntity.ok(userService.findAllBusinessOwners());
     }
 
+    /**
+     * Récupère tous les associés d'une entreprise.
+     */
+    @GetMapping("/business/{businessId}/associates")
+    public ResponseEntity<List<UserDto>> findAssociatesByBusinessId(@PathVariable UUID businessId) {
+        return ResponseEntity.ok(userService.findAssociatesByBusinessId(businessId));
+    }
+
     @PostMapping
     public ResponseEntity<UserDto> create(@Valid @RequestBody UserCreateRequest request) {
         UserDto dto = userService.create(
@@ -82,6 +91,19 @@ public class UserController {
     @PostMapping("/business-owner")
     public ResponseEntity<UserDto> createBusinessOwner(@Valid @RequestBody CreateBusinessOwnerRequest request) {
         UserDto dto = userService.createBusinessOwnerWithEmail(request.email());
+        return ResponseEntity.status(HttpStatus.CREATED).body(dto);
+    }
+
+    /**
+     * Crée un associé pour un propriétaire d'entreprise.
+     * Vérifie que le propriétaire a complété les 6 étapes de création de son entreprise.
+     * Génère un mot de passe temporaire et l'envoie par email.
+     */
+    @PostMapping("/{ownerId}/associate")
+    public ResponseEntity<UserDto> createAssociate(
+            @PathVariable UUID ownerId,
+            @Valid @RequestBody CreateAssociateRequest request) {
+        UserDto dto = userService.createAssociateForOwner(ownerId, request.email());
         return ResponseEntity.status(HttpStatus.CREATED).body(dto);
     }
 

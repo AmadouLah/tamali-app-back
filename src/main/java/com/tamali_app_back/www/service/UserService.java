@@ -45,6 +45,7 @@ public class UserService {
     private final EntityMapper mapper;
     private final PasswordEncoder passwordEncoder;
     private final EntityManager entityManager;
+    private final BusinessService businessService;
 
     @Value("${app.frontend-url:http://localhost:4200}")
     private String frontendUrl;
@@ -90,6 +91,49 @@ public class UserService {
                             .lastname((String) result[2])
                             .email((String) result[3])
                             .enabled((Boolean) result[4])
+                            .mustChangePassword(result[6] != null && ((Boolean) result[6]))
+                            .build();
+                    user.setRoles(roles);
+                    return mapper.toDto(user);
+                })
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Récupère tous les associés d'une entreprise (utilisateurs avec le rôle BUSINESS_ASSOCIATE).
+     */
+    @Transactional(readOnly = true)
+    public List<UserDto> findAssociatesByBusinessId(UUID businessId) {
+        Role associateRole = roleRepository.findByType(RoleType.BUSINESS_ASSOCIATE)
+                .orElseThrow(() -> new IllegalStateException("Rôle BUSINESS_ASSOCIATE introuvable."));
+        
+        Query nativeQuery = entityManager.createNativeQuery(
+            "SELECT DISTINCT u.id, u.firstname, u.lastname, u.email, u.enabled, u.business_id, " +
+            "u.must_change_password, u.created_at, u.updated_at, u.version, u.deleted_at " +
+            "FROM users u " +
+            "JOIN user_roles ur ON ur.user_id = u.id " +
+            "WHERE ur.role_id = :roleId AND u.business_id = :businessId AND u.deleted_at IS NULL " +
+            "ORDER BY u.created_at DESC"
+        );
+        nativeQuery.setParameter("roleId", associateRole.getId());
+        nativeQuery.setParameter("businessId", businessId);
+        
+        @SuppressWarnings("unchecked")
+        List<Object[]> results = nativeQuery.getResultList();
+        
+        return results.stream()
+                .map(result -> {
+                    UUID userId = (UUID) result[0];
+                    UUID ownerBusinessId = result[5] != null ? (UUID) result[5] : null;
+                    Set<Role> roles = loadValidRoles(userId);
+                    Business business = ownerBusinessId != null ? businessRepository.findById(ownerBusinessId).orElse(null) : null;
+                    User user = User.builder()
+                            .id(userId)
+                            .firstname((String) result[1])
+                            .lastname((String) result[2])
+                            .email((String) result[3])
+                            .enabled((Boolean) result[4])
+                            .business(business)
                             .mustChangePassword(result[6] != null && ((Boolean) result[6]))
                             .build();
                     user.setRoles(roles);
@@ -346,6 +390,174 @@ public class UserService {
 
         log.info("Propriétaire d'entreprise créé avec email: {}", trimmedEmail);
         return mapper.toDto(user);
+    }
+
+    /**
+     * Crée un associé pour un propriétaire d'entreprise.
+     * L'associé aura le rôle BUSINESS_ASSOCIATE et sera lié à la même entreprise que le propriétaire.
+     * Vérifie d'abord que le propriétaire a complété les 6 étapes de création de son entreprise.
+     */
+    @Transactional(noRollbackFor = org.springframework.dao.DataIntegrityViolationException.class)
+    public UserDto createAssociateForOwner(UUID ownerId, String associateEmail) {
+        entityManager.clear();
+        entityManager.flush();
+        
+        String trimmedEmail = associateEmail.trim();
+        log.debug("Tentative de création d'associé pour le propriétaire {} avec email: {}", ownerId, trimmedEmail);
+        
+        // Charger le propriétaire
+        User owner = loadUserByIdWithoutInvalidRoles(ownerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Propriétaire", ownerId));
+        
+        // Vérifier que c'est bien un BUSINESS_OWNER
+        boolean isBusinessOwner = owner.getRoles().stream()
+                .anyMatch(role -> role.getType() == RoleType.BUSINESS_OWNER);
+        if (!isBusinessOwner) {
+            throw new BadRequestException("L'utilisateur spécifié n'est pas un propriétaire d'entreprise.");
+        }
+        
+        // Vérifier que le propriétaire a une entreprise
+        if (owner.getBusiness() == null) {
+            throw new BadRequestException("Le propriétaire n'a pas d'entreprise associée.");
+        }
+        
+        // Vérifier que l'entreprise a complété les 6 étapes
+        if (!businessService.hasCompletedAllSteps(owner.getBusiness().getId())) {
+            throw new BadRequestException("Le propriétaire doit compléter les 6 étapes de création de son entreprise avant de pouvoir ajouter un associé.");
+        }
+        
+        // Supprimer définitivement les utilisateurs supprimés avec cet email
+        deleteSoftDeletedUserByEmail(trimmedEmail);
+        
+        // Vérifier si un utilisateur actif existe avec cet email
+        UUID foundUserId = null;
+        try {
+            Query checkUserQuery = entityManager.createNativeQuery(
+                "SELECT id FROM users WHERE UPPER(email) = UPPER(:email) AND deleted_at IS NULL LIMIT 1"
+            );
+            checkUserQuery.setParameter("email", trimmedEmail);
+            @SuppressWarnings("unchecked")
+            List<Object> results = checkUserQuery.getResultList();
+            if (!results.isEmpty() && results.get(0) != null) {
+                foundUserId = (UUID) results.get(0);
+                log.debug("Utilisateur existant trouvé avec l'email: {} (ID: {})", trimmedEmail, foundUserId);
+            }
+        } catch (Exception e) {
+            log.warn("Erreur lors de la vérification de l'email {}: {}", trimmedEmail, e.getMessage());
+        }
+        
+        // Si un utilisateur existe, le charger et gérer selon son état
+        final UUID finalFoundUserId = foundUserId;
+        if (finalFoundUserId != null) {
+            User existingUser = loadUserByIdWithoutInvalidRoles(finalFoundUserId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Utilisateur", finalFoundUserId));
+            
+            // Vérifier si l'utilisateur a déjà le rôle BUSINESS_ASSOCIATE pour cette entreprise
+            boolean hasAssociateRole = existingUser.getRoles().stream()
+                    .anyMatch(role -> role.getType() == RoleType.BUSINESS_ASSOCIATE);
+            boolean isSameBusiness = existingUser.getBusiness() != null && 
+                    existingUser.getBusiness().getId().equals(owner.getBusiness().getId());
+            
+            if (hasAssociateRole && isSameBusiness) {
+                log.info("L'utilisateur {} est déjà associé à cette entreprise", trimmedEmail);
+                return mapper.toDto(existingUser);
+            }
+            
+            // Si l'utilisateur existe mais n'a pas le rôle ou n'est pas lié à la bonne entreprise
+            Role associateRole = roleRepository.findByType(RoleType.BUSINESS_ASSOCIATE)
+                    .orElseThrow(() -> new IllegalStateException("Rôle BUSINESS_ASSOCIATE introuvable."));
+            
+            String temporaryPassword = generateTemporaryPassword();
+            String encodedPassword = passwordEncoder.encode(temporaryPassword);
+            
+            // Ajouter le rôle et mettre à jour l'entreprise et le mot de passe
+            Query insertRoleQuery = entityManager.createNativeQuery(
+                "INSERT INTO user_roles (user_id, role_id) " +
+                "SELECT :userId, :roleId " +
+                "WHERE NOT EXISTS (SELECT 1 FROM user_roles WHERE user_id = :userId AND role_id = :roleId)"
+            );
+            insertRoleQuery.setParameter("userId", existingUser.getId());
+            insertRoleQuery.setParameter("roleId", associateRole.getId());
+            insertRoleQuery.executeUpdate();
+            
+            Query updateQuery = entityManager.createNativeQuery(
+                "UPDATE users SET business_id = :businessId, password = :password, " +
+                "must_change_password = true, enabled = true, updated_at = :updatedAt " +
+                "WHERE id = :userId AND deleted_at IS NULL"
+            );
+            updateQuery.setParameter("businessId", owner.getBusiness().getId());
+            updateQuery.setParameter("password", encodedPassword);
+            updateQuery.setParameter("updatedAt", Timestamp.valueOf(LocalDateTime.now()));
+            updateQuery.setParameter("userId", existingUser.getId());
+            int updated = updateQuery.executeUpdate();
+            
+            if (updated == 0) {
+                throw new ResourceNotFoundException("Utilisateur", existingUser.getId());
+            }
+            
+            sendTemporaryPasswordEmail(trimmedEmail, temporaryPassword);
+            
+            entityManager.clear();
+            User updatedUser = loadUserByIdWithoutInvalidRoles(existingUser.getId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Utilisateur", existingUser.getId()));
+            
+            log.info("Associé créé/mis à jour pour l'utilisateur: {}", trimmedEmail);
+            return mapper.toDto(updatedUser);
+        }
+        
+        // Créer un nouvel utilisateur associé
+        Role associateRole = roleRepository.findByType(RoleType.BUSINESS_ASSOCIATE)
+                .orElseThrow(() -> new IllegalStateException("Rôle BUSINESS_ASSOCIATE introuvable."));
+        
+        String temporaryPassword = generateTemporaryPassword();
+        String encodedPassword = passwordEncoder.encode(temporaryPassword);
+        
+        User associate = User.builder()
+                .email(trimmedEmail)
+                .password(encodedPassword)
+                .enabled(true)
+                .mustChangePassword(true)
+                .business(owner.getBusiness())
+                .roles(Set.of(associateRole))
+                .build();
+        
+        try {
+            associate = userRepository.save(associate);
+            entityManager.flush();
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            log.warn("Violation de contrainte détectée pour {}, chargement de l'utilisateur existant", trimmedEmail);
+            entityManager.clear();
+            
+            Query reloadQuery = entityManager.createNativeQuery(
+                "SELECT id FROM users WHERE UPPER(email) = UPPER(:email) AND deleted_at IS NULL LIMIT 1"
+            );
+            reloadQuery.setParameter("email", trimmedEmail);
+            
+            UUID existingUserId = null;
+            try {
+                @SuppressWarnings("unchecked")
+                List<Object> reloadResults = reloadQuery.getResultList();
+                if (!reloadResults.isEmpty() && reloadResults.get(0) != null) {
+                    existingUserId = (UUID) reloadResults.get(0);
+                }
+            } catch (Exception ex) {
+                log.error("Erreur lors du rechargement de l'utilisateur avec email {}: {}", trimmedEmail, ex.getMessage());
+            }
+            
+            if (existingUserId == null) {
+                throw new BadRequestException("Un utilisateur avec cet email existe déjà mais n'a pas pu être chargé.");
+            }
+            
+            User existingUser = loadUserByIdWithoutInvalidRoles(existingUserId)
+                    .orElseThrow(() -> new BadRequestException("Un utilisateur avec cet email existe déjà."));
+            
+            return mapper.toDto(existingUser);
+        }
+        
+        sendTemporaryPasswordEmail(trimmedEmail, temporaryPassword);
+        
+        log.info("Associé créé avec email: {} pour le propriétaire {}", trimmedEmail, ownerId);
+        return mapper.toDto(associate);
     }
 
     /**
@@ -870,7 +1082,7 @@ public class UserService {
                 "WHERE ur.user_id = u.id " +
                 "AND ur.role_id = r.id " +
                 "AND UPPER(u.email) = UPPER(:email) " +
-                "AND r.name NOT IN ('SUPER_ADMIN', 'BUSINESS_OWNER')"
+                "AND r.name NOT IN ('SUPER_ADMIN', 'BUSINESS_OWNER', 'BUSINESS_ASSOCIATE')"
             );
             query.setParameter("email", email);
             int deleted = query.executeUpdate();
@@ -1056,7 +1268,7 @@ public class UserService {
             Query rolesQuery = entityManager.createNativeQuery(
                 "SELECT r.id, r.name FROM roles r " +
                 "JOIN user_roles ur ON ur.role_id = r.id " +
-                "WHERE ur.user_id = :userId AND r.name IN ('SUPER_ADMIN', 'BUSINESS_OWNER')"
+                "WHERE ur.user_id = :userId AND r.name IN ('SUPER_ADMIN', 'BUSINESS_OWNER', 'BUSINESS_ASSOCIATE')"
             );
             rolesQuery.setParameter("userId", userId);
             @SuppressWarnings("unchecked")
