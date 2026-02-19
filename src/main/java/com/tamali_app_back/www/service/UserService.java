@@ -388,14 +388,8 @@ public class UserService {
         }
 
         // Envoyer l'email avec le mot de passe temporaire (après le commit de la transaction)
-        // S'assurer que l'email est toujours envoyé même si une exception se produit après
-        try {
-            sendTemporaryPasswordEmail(trimmedEmail, temporaryPassword);
-            log.info("Email avec mot de passe temporaire envoyé à: {}", trimmedEmail);
-        } catch (Exception e) {
-            log.error("Erreur lors de l'envoi de l'email à {}: {}", trimmedEmail, e.getMessage(), e);
-            // Ne pas faire échouer la création si l'email échoue, mais logger l'erreur
-        }
+        // S'assurer que l'email est toujours tenté même si une exception se produit après
+        sendTemporaryPasswordEmail(trimmedEmail, temporaryPassword);
 
         log.info("Propriétaire d'entreprise créé avec email: {}", trimmedEmail);
         return mapper.toDto(savedUser);
@@ -873,6 +867,7 @@ public class UserService {
     /**
      * Envoie un email avec le mot de passe temporaire à l'utilisateur.
      * Méthode centralisée pour éviter la duplication de code.
+     * Cette méthode ne propage pas les exceptions pour ne pas faire échouer la création de l'utilisateur.
      */
     private void sendTemporaryPasswordEmail(String email, String temporaryPassword) {
         String loginUrl = frontendUrl + "/auth/login";
@@ -880,8 +875,9 @@ public class UserService {
             mailService.sendTemporaryPassword(email, temporaryPassword, loginUrl);
             log.info("Email avec mot de passe temporaire envoyé avec succès à: {}", email);
         } catch (Exception e) {
-            log.error("Erreur lors de l'envoi de l'email avec le mot de passe temporaire à {}: {}", email, e.getMessage(), e);
-            // Ne pas faire échouer l'opération si l'email échoue, mais logger l'erreur avec plus de détails
+            log.error("ÉCHEC de l'envoi de l'email avec le mot de passe temporaire à {}: {}", email, e.getMessage(), e);
+            // Ne pas faire échouer l'opération si l'email échoue, mais logger l'erreur avec tous les détails
+            // L'utilisateur est créé mais n'a pas reçu l'email - l'administrateur devra le contacter manuellement
         }
     }
 
