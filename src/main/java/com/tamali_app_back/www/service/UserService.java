@@ -1657,16 +1657,63 @@ public class UserService {
     private void deleteUserReferences(UUID userId) {
         log.info("Suppression des références de l'utilisateur {} dans les autres tables...", userId);
         
-        // Supprimer les ventes (sales) associées à cet utilisateur (cashier_id)
-        Query deleteSalesQuery = entityManager.createNativeQuery(
-            "DELETE FROM sales WHERE cashier_id = :userId"
+        // Trouver toutes les ventes (sales) associées à cet utilisateur (cashier_id)
+        Query findSalesQuery = entityManager.createNativeQuery(
+            "SELECT id FROM sales WHERE cashier_id = :userId"
         );
-        deleteSalesQuery.setParameter("userId", userId);
-        int salesDeleted = deleteSalesQuery.executeUpdate();
-        if (salesDeleted > 0) {
-            log.info("Suppression de {} ventes associées à l'utilisateur {}", salesDeleted, userId);
+        findSalesQuery.setParameter("userId", userId);
+        @SuppressWarnings("unchecked")
+        List<UUID> saleIds = findSalesQuery.getResultList();
+        
+        if (!saleIds.isEmpty()) {
+            log.info("Trouvé {} ventes associées à l'utilisateur {}, suppression des dépendances...", saleIds.size(), userId);
+            
+            // Pour chaque vente, supprimer d'abord les dépendances
+            for (UUID saleId : saleIds) {
+                // Supprimer les factures (invoices) liées à cette vente
+                Query deleteInvoicesQuery = entityManager.createNativeQuery(
+                    "DELETE FROM invoices WHERE sale_id = :saleId"
+                );
+                deleteInvoicesQuery.setParameter("saleId", saleId);
+                int invoicesDeleted = deleteInvoicesQuery.executeUpdate();
+                if (invoicesDeleted > 0) {
+                    log.debug("Suppression de {} factures pour la vente {}", invoicesDeleted, saleId);
+                }
+                
+                // Supprimer les paiements (payments) liés à cette vente
+                Query deletePaymentsQuery = entityManager.createNativeQuery(
+                    "DELETE FROM payments WHERE sale_id = :saleId"
+                );
+                deletePaymentsQuery.setParameter("saleId", saleId);
+                int paymentsDeleted = deletePaymentsQuery.executeUpdate();
+                if (paymentsDeleted > 0) {
+                    log.debug("Suppression de {} paiements pour la vente {}", paymentsDeleted, saleId);
+                }
+                
+                // Supprimer les items de vente (sale_items) liés à cette vente
+                Query deleteSaleItemsQuery = entityManager.createNativeQuery(
+                    "DELETE FROM sale_items WHERE sale_id = :saleId"
+                );
+                deleteSaleItemsQuery.setParameter("saleId", saleId);
+                int saleItemsDeleted = deleteSaleItemsQuery.executeUpdate();
+                if (saleItemsDeleted > 0) {
+                    log.debug("Suppression de {} items de vente pour la vente {}", saleItemsDeleted, saleId);
+                }
+            }
+            
+            entityManager.flush();
+            
+            // Maintenant supprimer les ventes elles-mêmes
+            Query deleteSalesQuery = entityManager.createNativeQuery(
+                "DELETE FROM sales WHERE cashier_id = :userId"
+            );
+            deleteSalesQuery.setParameter("userId", userId);
+            int salesDeleted = deleteSalesQuery.executeUpdate();
+            if (salesDeleted > 0) {
+                log.info("Suppression de {} ventes associées à l'utilisateur {}", salesDeleted, userId);
+            }
+            entityManager.flush();
         }
-        entityManager.flush();
         
         // Supprimer les invitations créées par cet utilisateur (created_by_id)
         Query deleteInvitationsQuery = entityManager.createNativeQuery(
