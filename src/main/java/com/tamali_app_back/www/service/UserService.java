@@ -104,9 +104,30 @@ public class UserService {
 
     /**
      * Récupère tous les associés d'une entreprise (utilisateurs avec le rôle BUSINESS_ASSOCIATE).
+     * Nettoie automatiquement les associés orphelins si aucun propriétaire n'existe pour cette entreprise.
      */
     @Transactional(readOnly = true)
     public List<UserDto> findAssociatesByBusinessId(UUID businessId) {
+        // Vérifier d'abord si un propriétaire existe pour cette entreprise
+        Query checkOwnerQuery = entityManager.createNativeQuery(
+            "SELECT COUNT(*) FROM users owner " +
+            "JOIN user_roles owner_ur ON owner_ur.user_id = owner.id " +
+            "JOIN roles owner_r ON owner_ur.role_id = owner_r.id " +
+            "WHERE owner_r.name = 'BUSINESS_OWNER' " +
+            "AND owner.business_id = :businessId " +
+            "AND owner.deleted_at IS NULL"
+        );
+        checkOwnerQuery.setParameter("businessId", businessId);
+        Long ownerCount = ((Number) checkOwnerQuery.getSingleResult()).longValue();
+        
+        // Si aucun propriétaire n'existe, nettoyer les associés orphelins et retourner une liste vide
+        if (ownerCount == 0) {
+            log.warn("Aucun propriétaire trouvé pour l'entreprise {}. Nettoyage des associés orphelins...", businessId);
+            // Appeler la méthode de nettoyage dans une nouvelle transaction
+            cleanupOrphanedAssociatesForBusinessInNewTransaction(businessId);
+            return List.of();
+        }
+        
         Role associateRole = roleRepository.findByType(RoleType.BUSINESS_ASSOCIATE)
                 .orElseThrow(() -> new IllegalStateException("Rôle BUSINESS_ASSOCIATE introuvable."));
         
@@ -455,7 +476,30 @@ public class UserService {
         String trimmedEmail = associateEmail.trim();
         log.debug("Tentative de création d'associé pour le propriétaire {} avec email: {}", ownerId, trimmedEmail);
         
-        // Charger le propriétaire
+        // Vérifier d'abord que le propriétaire existe et n'est pas supprimé
+        Query checkOwnerQuery = entityManager.createNativeQuery(
+            "SELECT id, email, business_id FROM users WHERE id = :ownerId AND deleted_at IS NULL LIMIT 1"
+        );
+        checkOwnerQuery.setParameter("ownerId", ownerId);
+        Object[] ownerData;
+        try {
+            ownerData = (Object[]) checkOwnerQuery.getSingleResult();
+        } catch (jakarta.persistence.NoResultException e) {
+            log.warn("Propriétaire {} introuvable ou supprimé. Nettoyage des associés orphelins...", ownerId);
+            // Nettoyer les associés orphelins avant de lever l'erreur
+            cleanupOrphanedAssociates();
+            throw new ResourceNotFoundException("Propriétaire", ownerId);
+        }
+        
+        UUID ownerBusinessId = ownerData[2] != null ? (UUID) ownerData[2] : null;
+        if (ownerBusinessId == null) {
+            throw new BadRequestException("Le propriétaire n'a pas d'entreprise associée.");
+        }
+        
+        // Nettoyer les associés orphelins pour cette entreprise avant de continuer
+        cleanupOrphanedAssociatesForBusiness(ownerBusinessId);
+        
+        // Charger le propriétaire après le nettoyage
         User owner = loadUserByIdWithoutInvalidRoles(ownerId)
                 .orElseThrow(() -> new ResourceNotFoundException("Propriétaire", ownerId));
         
@@ -1231,6 +1275,60 @@ public class UserService {
             log.warn("Erreur lors du nettoyage automatique des associés orphelins: {}", e.getMessage());
             // Ne pas faire échouer la suppression du propriétaire si le nettoyage échoue
         }
+    }
+
+    /**
+     * Nettoie les associés orphelins pour un business_id spécifique dans une nouvelle transaction.
+     * Utilisé depuis une méthode en readOnly.
+     */
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    private void cleanupOrphanedAssociatesForBusinessInNewTransaction(UUID businessId) {
+        cleanupOrphanedAssociatesForBusiness(businessId);
+    }
+
+    /**
+     * Nettoie les associés orphelins pour un business_id spécifique.
+     * Méthode privée réutilisable pour éviter la duplication de code.
+     * 
+     * @param businessId L'ID de l'entreprise pour laquelle nettoyer les associés orphelins
+     * @return Le nombre d'associés orphelins supprimés
+     */
+    private int cleanupOrphanedAssociatesForBusiness(UUID businessId) {
+        Query cleanupOrphansQuery = entityManager.createNativeQuery(
+            "DELETE FROM users WHERE business_id = :businessId " +
+            "AND id IN (" +
+            "  SELECT ur.user_id FROM user_roles ur " +
+            "  JOIN roles r ON ur.role_id = r.id " +
+            "  WHERE r.name = 'BUSINESS_ASSOCIATE'" +
+            ") " +
+            "AND NOT EXISTS (" +
+            "  SELECT 1 FROM users owner " +
+            "  JOIN user_roles owner_ur ON owner_ur.user_id = owner.id " +
+            "  JOIN roles owner_r ON owner_ur.role_id = owner_r.id " +
+            "  WHERE owner_r.name = 'BUSINESS_OWNER' " +
+            "  AND owner.business_id = :businessId " +
+            "  AND owner.deleted_at IS NULL" +
+            ")"
+        );
+        cleanupOrphansQuery.setParameter("businessId", businessId);
+        int cleanedOrphans = cleanupOrphansQuery.executeUpdate();
+        
+        if (cleanedOrphans > 0) {
+            log.info("Nettoyage automatique: {} associés orphelins supprimés pour l'entreprise {}", 
+                    cleanedOrphans, businessId);
+            // Supprimer aussi les rôles orphelins
+            Query deleteOrphanRolesQuery = entityManager.createNativeQuery(
+                "DELETE FROM user_roles ur " +
+                "USING roles r " +
+                "WHERE ur.role_id = r.id " +
+                "AND r.name = 'BUSINESS_ASSOCIATE' " +
+                "AND ur.user_id NOT IN (SELECT id FROM users)"
+            );
+            deleteOrphanRolesQuery.executeUpdate();
+            entityManager.flush();
+        }
+        
+        return cleanedOrphans;
     }
 
     /**
