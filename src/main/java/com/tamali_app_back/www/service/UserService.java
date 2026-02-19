@@ -527,9 +527,14 @@ public class UserService {
                 .roles(Set.of(associateRole))
                 .build();
         
+        UUID associateId;
         try {
-            associate = userRepository.save(associate);
+            User savedAssociate = userRepository.save(associate);
+            // Forcer le flush pour s'assurer que l'utilisateur et ses rôles sont persistés
             entityManager.flush();
+            // Vérifier que le rôle est bien persisté en forçant un refresh
+            entityManager.refresh(savedAssociate);
+            associateId = savedAssociate.getId();
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
             log.warn("Violation de contrainte détectée pour {}, chargement de l'utilisateur existant", trimmedEmail);
             entityManager.clear();
@@ -562,8 +567,13 @@ public class UserService {
         
         sendTemporaryPasswordEmail(trimmedEmail, temporaryPassword);
         
+        // Recharger l'associé depuis la base de données pour s'assurer que toutes les relations sont chargées
+        entityManager.clear();
+        User reloadedAssociate = loadUserByIdWithoutInvalidRoles(associateId)
+                .orElseThrow(() -> new ResourceNotFoundException("Associé", associateId));
+        
         log.info("Associé créé avec email: {} pour le propriétaire {}", trimmedEmail, ownerId);
-        return mapper.toDto(associate);
+        return mapper.toDto(reloadedAssociate);
     }
 
     /**
