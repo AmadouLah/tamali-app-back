@@ -536,11 +536,25 @@ public class UserService {
         UUID associateId;
         try {
             User savedAssociate = userRepository.save(associate);
-            // Forcer le flush pour s'assurer que l'utilisateur et ses rôles sont persistés
-            entityManager.flush();
-            // Vérifier que le rôle est bien persisté en forçant un refresh
-            entityManager.refresh(savedAssociate);
             associateId = savedAssociate.getId();
+            
+            // Forcer le flush pour s'assurer que l'utilisateur est persisté
+            entityManager.flush();
+            
+            // Insérer explicitement le rôle dans la table user_roles avec une requête native
+            // pour garantir la persistance même après redémarrage du serveur
+            Query insertRoleQuery = entityManager.createNativeQuery(
+                "INSERT INTO user_roles (user_id, role_id) " +
+                "SELECT :userId, :roleId " +
+                "WHERE NOT EXISTS (SELECT 1 FROM user_roles WHERE user_id = :userId AND role_id = :roleId)"
+            );
+            insertRoleQuery.setParameter("userId", associateId);
+            insertRoleQuery.setParameter("roleId", associateRole.getId());
+            insertRoleQuery.executeUpdate();
+            
+            // Forcer un nouveau flush pour s'assurer que le rôle est bien persisté
+            entityManager.flush();
+            
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
             log.warn("Violation de contrainte détectée pour {}, chargement de l'utilisateur existant", trimmedEmail);
             entityManager.clear();
