@@ -1191,6 +1191,9 @@ public class UserService {
                 String associateEmail = (String) associateRow[1];
                 
                 try {
+                    // Supprimer toutes les références de l'associé dans les autres tables
+                    deleteUserReferences(associateId);
+                    
                     // Supprimer les relations dans user_roles d'abord
                     Query deleteAssociateRolesQuery = entityManager.createNativeQuery(
                         "DELETE FROM user_roles WHERE user_id = :associateId"
@@ -1329,6 +1332,9 @@ public class UserService {
         }
         
         try {
+            // Supprimer d'abord toutes les références de l'utilisateur dans les autres tables
+            deleteUserReferences(userId);
+            
             // Supprimer d'abord les relations dans user_roles du propriétaire (même si l'utilisateur est soft deleted)
             Query deleteRolesQuery = entityManager.createNativeQuery(
                 "DELETE FROM user_roles WHERE user_id = :userId"
@@ -1455,6 +1461,9 @@ public class UserService {
             String associateEmail = (String) associateRow[1];
             
             try {
+                // Supprimer toutes les références de l'associé dans les autres tables
+                deleteUserReferences(associateId);
+                
                 // Supprimer les rôles d'abord
                 Query deleteRolesQuery = entityManager.createNativeQuery(
                     "DELETE FROM user_roles WHERE user_id = :associateId"
@@ -1561,6 +1570,9 @@ public class UserService {
                         associateEmail, associateId, businessId);
                 
                 try {
+                    // Supprimer toutes les références de l'associé dans les autres tables
+                    deleteUserReferences(associateId);
+                    
                     // Supprimer les relations dans user_roles d'abord
                     Query deleteRolesQuery = entityManager.createNativeQuery(
                         "DELETE FROM user_roles WHERE user_id = :associateId"
@@ -1637,6 +1649,40 @@ public class UserService {
     }
 
     /**
+     * Supprime toutes les références d'un utilisateur dans les autres tables avant sa suppression.
+     * Méthode privée réutilisable pour éviter la duplication de code.
+     * 
+     * @param userId L'ID de l'utilisateur dont les références doivent être supprimées
+     */
+    private void deleteUserReferences(UUID userId) {
+        log.info("Suppression des références de l'utilisateur {} dans les autres tables...", userId);
+        
+        // Supprimer les ventes (sales) associées à cet utilisateur (cashier_id)
+        Query deleteSalesQuery = entityManager.createNativeQuery(
+            "DELETE FROM sales WHERE cashier_id = :userId"
+        );
+        deleteSalesQuery.setParameter("userId", userId);
+        int salesDeleted = deleteSalesQuery.executeUpdate();
+        if (salesDeleted > 0) {
+            log.info("Suppression de {} ventes associées à l'utilisateur {}", salesDeleted, userId);
+        }
+        entityManager.flush();
+        
+        // Supprimer les invitations créées par cet utilisateur (created_by_id)
+        Query deleteInvitationsQuery = entityManager.createNativeQuery(
+            "DELETE FROM invitations WHERE created_by_id = :userId"
+        );
+        deleteInvitationsQuery.setParameter("userId", userId);
+        int invitationsDeleted = deleteInvitationsQuery.executeUpdate();
+        if (invitationsDeleted > 0) {
+            log.info("Suppression de {} invitations créées par l'utilisateur {}", invitationsDeleted, userId);
+        }
+        entityManager.flush();
+        
+        log.info("Toutes les références de l'utilisateur {} ont été supprimées", userId);
+    }
+
+    /**
      * Supprime définitivement un utilisateur supprimé (soft delete) par son email.
      * Méthode utilitaire pour éviter la duplication de code.
      * Retourne true si un utilisateur supprimé a été trouvé et supprimé, false sinon.
@@ -1653,6 +1699,9 @@ public class UserService {
             if (!deletedResults.isEmpty() && deletedResults.get(0) != null) {
                 UUID deletedUserId = (UUID) deletedResults.get(0);
                 log.info("Utilisateur supprimé trouvé, suppression définitive pour permettre la réutilisation de l'email: {}", email);
+                
+                // Supprimer toutes les références de l'utilisateur dans les autres tables
+                deleteUserReferences(deletedUserId);
                 
                 // Supprimer définitivement les relations dans user_roles
                 Query deleteRolesQuery = entityManager.createNativeQuery(
