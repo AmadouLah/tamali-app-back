@@ -1066,37 +1066,37 @@ public class UserService {
             log.info("Suppression du propriétaire d'entreprise {} (business_id: {}). Suppression de tous les associés...", 
                     userEmail, businessId);
             
-            // Trouver tous les associés de cette entreprise
-            Role associateRole = roleRepository.findByType(RoleType.BUSINESS_ASSOCIATE)
-                    .orElseThrow(() -> new IllegalStateException("Rôle BUSINESS_ASSOCIATE introuvable."));
-            
+            // Trouver TOUS les associés de cette entreprise (même ceux qui pourraient être soft deleted)
+            // Utiliser une requête plus large pour être sûr de tous les trouver
             Query findAssociatesQuery = entityManager.createNativeQuery(
-                "SELECT u.id, u.email " +
+                "SELECT DISTINCT u.id, u.email " +
                 "FROM users u " +
                 "JOIN user_roles ur ON ur.user_id = u.id " +
                 "JOIN roles r ON ur.role_id = r.id " +
-                "WHERE r.name = 'BUSINESS_ASSOCIATE' AND u.business_id = :businessId AND u.deleted_at IS NULL"
+                "WHERE r.name = 'BUSINESS_ASSOCIATE' AND u.business_id = :businessId"
             );
             findAssociatesQuery.setParameter("businessId", businessId);
             @SuppressWarnings("unchecked")
             List<Object[]> associates = findAssociatesQuery.getResultList();
             
-            log.info("Trouvé {} associés à supprimer pour l'entreprise {}", associates.size(), businessId);
+            log.info("Trouvé {} associés à supprimer pour l'entreprise {} (y compris ceux déjà supprimés)", 
+                    associates.size(), businessId);
             
             // Supprimer chaque associé
+            int deletedCount = 0;
             for (Object[] associateRow : associates) {
                 UUID associateId = (UUID) associateRow[0];
                 String associateEmail = (String) associateRow[1];
                 
                 try {
-                    // Supprimer les relations dans user_roles
+                    // Supprimer les relations dans user_roles d'abord
                     Query deleteAssociateRolesQuery = entityManager.createNativeQuery(
                         "DELETE FROM user_roles WHERE user_id = :associateId"
                     );
                     deleteAssociateRolesQuery.setParameter("associateId", associateId);
-                    deleteAssociateRolesQuery.executeUpdate();
+                    int rolesDeleted = deleteAssociateRolesQuery.executeUpdate();
                     
-                    // Supprimer définitivement l'associé
+                    // Supprimer définitivement l'associé (même s'il est déjà soft deleted)
                     Query deleteAssociateQuery = entityManager.createNativeQuery(
                         "DELETE FROM users WHERE id = :associateId"
                     );
@@ -1104,17 +1104,99 @@ public class UserService {
                     int deletedAssociate = deleteAssociateQuery.executeUpdate();
                     
                     if (deletedAssociate > 0) {
-                        log.info("Associé supprimé: {} (ID: {})", associateEmail, associateId);
+                        deletedCount++;
+                        log.info("Associé supprimé définitivement: {} (ID: {}), {} rôles supprimés", 
+                                associateEmail, associateId, rolesDeleted);
+                    } else {
+                        log.warn("Associé {} (ID: {}) n'a pas pu être supprimé (peut-être déjà supprimé)", 
+                                associateEmail, associateId);
                     }
                 } catch (Exception e) {
                     log.error("Erreur lors de la suppression de l'associé {} ({}): {}", 
-                            associateEmail, associateId, e.getMessage());
+                            associateEmail, associateId, e.getMessage(), e);
                     // Continuer avec les autres associés même en cas d'erreur
                 }
             }
             
             entityManager.flush();
-            log.info("Tous les associés de l'entreprise {} ont été supprimés", businessId);
+            log.info("Suppression terminée: {} associés supprimés sur {} trouvés pour l'entreprise {}", 
+                    deletedCount, associates.size(), businessId);
+            
+            // Vérification finale: s'assurer qu'il ne reste plus d'associés pour cette entreprise
+            Query verifyNoAssociatesQuery = entityManager.createNativeQuery(
+                "SELECT COUNT(*) FROM users u " +
+                "JOIN user_roles ur ON ur.user_id = u.id " +
+                "JOIN roles r ON ur.role_id = r.id " +
+                "WHERE r.name = 'BUSINESS_ASSOCIATE' AND u.business_id = :businessId"
+            );
+            verifyNoAssociatesQuery.setParameter("businessId", businessId);
+            Long remainingAssociates = ((Number) verifyNoAssociatesQuery.getSingleResult()).longValue();
+            
+            if (remainingAssociates > 0) {
+                log.warn("ATTENTION: Il reste {} associés pour l'entreprise {} après la suppression !", 
+                        remainingAssociates, businessId);
+                // Essayer une suppression plus agressive
+                Query aggressiveDeleteQuery = entityManager.createNativeQuery(
+                    "DELETE FROM users WHERE business_id = :businessId " +
+                    "AND id IN (" +
+                    "  SELECT ur.user_id FROM user_roles ur " +
+                    "  JOIN roles r ON ur.role_id = r.id " +
+                    "  WHERE r.name = 'BUSINESS_ASSOCIATE'" +
+                    ")"
+                );
+                aggressiveDeleteQuery.setParameter("businessId", businessId);
+                int aggressiveDeleted = aggressiveDeleteQuery.executeUpdate();
+                log.info("Suppression agressive: {} associés supplémentaires supprimés", aggressiveDeleted);
+                
+                // Supprimer aussi les rôles orphelins
+                Query deleteOrphanRolesQuery = entityManager.createNativeQuery(
+                    "DELETE FROM user_roles ur " +
+                    "USING users u, roles r " +
+                    "WHERE ur.user_id = u.id " +
+                    "AND ur.role_id = r.id " +
+                    "AND r.name = 'BUSINESS_ASSOCIATE' " +
+                    "AND u.business_id = :businessId"
+                );
+                deleteOrphanRolesQuery.setParameter("businessId", businessId);
+                int orphanRolesDeleted = deleteOrphanRolesQuery.executeUpdate();
+                log.info("Rôles orphelins supprimés: {}", orphanRolesDeleted);
+                
+                entityManager.flush();
+            }
+            
+            // Nettoyage final: supprimer tous les associés orphelins restants pour cette entreprise
+            // (au cas où certains auraient été créés après la suppression du propriétaire)
+            Query finalCleanupQuery = entityManager.createNativeQuery(
+                "DELETE FROM users WHERE business_id = :businessId " +
+                "AND id IN (" +
+                "  SELECT ur.user_id FROM user_roles ur " +
+                "  JOIN roles r ON ur.role_id = r.id " +
+                "  WHERE r.name = 'BUSINESS_ASSOCIATE'" +
+                ")"
+            );
+            finalCleanupQuery.setParameter("businessId", businessId);
+            int finalCleanupDeleted = finalCleanupQuery.executeUpdate();
+            
+            if (finalCleanupDeleted > 0) {
+                log.info("Nettoyage final: {} associés supplémentaires supprimés pour l'entreprise {}", 
+                        finalCleanupDeleted, businessId);
+                
+                // Supprimer aussi les rôles orphelins restants
+                Query finalRolesCleanupQuery = entityManager.createNativeQuery(
+                    "DELETE FROM user_roles ur " +
+                    "USING roles r " +
+                    "WHERE ur.role_id = r.id " +
+                    "AND r.name = 'BUSINESS_ASSOCIATE' " +
+                    "AND ur.user_id IN (" +
+                    "  SELECT id FROM users WHERE business_id = :businessId" +
+                    ")"
+                );
+                finalRolesCleanupQuery.setParameter("businessId", businessId);
+                int finalRolesDeleted = finalRolesCleanupQuery.executeUpdate();
+                log.info("Rôles orphelins finaux supprimés: {}", finalRolesDeleted);
+            }
+            
+            entityManager.flush();
         }
         
         // Supprimer d'abord les relations dans user_roles du propriétaire (même si l'utilisateur est soft deleted)
@@ -1136,6 +1218,80 @@ public class UserService {
         }
         
         log.info("Compte définitivement supprimé de la base de données pour l'utilisateur: {}", userEmail);
+    }
+
+    /**
+     * Nettoie les associés orphelins (associés dont le propriétaire d'entreprise n'existe plus).
+     * Cette méthode trouve tous les associés qui ont un business_id mais dont le propriétaire
+     * n'existe plus dans la base de données (supprimé définitivement).
+     * 
+     * @return Le nombre d'associés orphelins supprimés
+     */
+    @Transactional
+    public int cleanupOrphanedAssociates() {
+        entityManager.clear();
+        
+        log.info("Nettoyage des associés orphelins...");
+        
+        // Trouver tous les associés qui ont un business_id mais dont le propriétaire n'existe plus
+        Query findOrphanedAssociatesQuery = entityManager.createNativeQuery(
+            "SELECT DISTINCT u.id, u.email, u.business_id " +
+            "FROM users u " +
+            "JOIN user_roles ur ON ur.user_id = u.id " +
+            "JOIN roles r ON ur.role_id = r.id " +
+            "WHERE r.name = 'BUSINESS_ASSOCIATE' " +
+            "AND u.business_id IS NOT NULL " +
+            "AND NOT EXISTS (" +
+            "  SELECT 1 FROM users owner " +
+            "  JOIN user_roles owner_ur ON owner_ur.user_id = owner.id " +
+            "  JOIN roles owner_r ON owner_ur.role_id = owner_r.id " +
+            "  WHERE owner_r.name = 'BUSINESS_OWNER' " +
+            "  AND owner.business_id = u.business_id" +
+            ")"
+        );
+        
+        @SuppressWarnings("unchecked")
+        List<Object[]> orphanedAssociates = findOrphanedAssociatesQuery.getResultList();
+        
+        log.info("Trouvé {} associés orphelins à nettoyer", orphanedAssociates.size());
+        
+        int deletedCount = 0;
+        for (Object[] associateRow : orphanedAssociates) {
+            UUID associateId = (UUID) associateRow[0];
+            String associateEmail = (String) associateRow[1];
+            UUID businessId = (UUID) associateRow[2];
+            
+            try {
+                // Supprimer les relations dans user_roles
+                Query deleteRolesQuery = entityManager.createNativeQuery(
+                    "DELETE FROM user_roles WHERE user_id = :associateId"
+                );
+                deleteRolesQuery.setParameter("associateId", associateId);
+                deleteRolesQuery.executeUpdate();
+                
+                // Supprimer définitivement l'associé
+                Query deleteAssociateQuery = entityManager.createNativeQuery(
+                    "DELETE FROM users WHERE id = :associateId"
+                );
+                deleteAssociateQuery.setParameter("associateId", associateId);
+                int deleted = deleteAssociateQuery.executeUpdate();
+                
+                if (deleted > 0) {
+                    deletedCount++;
+                    log.info("Associé orphelin supprimé: {} (ID: {}, business_id: {})", 
+                            associateEmail, associateId, businessId);
+                }
+            } catch (Exception e) {
+                log.error("Erreur lors de la suppression de l'associé orphelin {} ({}): {}", 
+                        associateEmail, associateId, e.getMessage(), e);
+            }
+        }
+        
+        entityManager.flush();
+        log.info("Nettoyage terminé: {} associés orphelins supprimés sur {} trouvés", 
+                deletedCount, orphanedAssociates.size());
+        
+        return deletedCount;
     }
 
     /**

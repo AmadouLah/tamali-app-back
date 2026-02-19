@@ -179,4 +179,14 @@ public class UserController {
         userService.deleteAccount(id);
         return ResponseEntity.noContent().build();
     }
+
+    /**
+     * Nettoie les associés orphelins (associés dont le propriétaire d'entreprise n'existe plus).
+     * Endpoint réservé aux super admins pour le nettoyage manuel.
+     */
+    @PostMapping("/cleanup-orphaned-associates")
+    public ResponseEntity<String> cleanupOrphanedAssociates() {
+        int deleted = userService.cleanupOrphanedAssociates();
+        return ResponseEntity.ok("Nettoyage terminé: " + deleted + " associés orphelins supprimés");
+    }
 }
