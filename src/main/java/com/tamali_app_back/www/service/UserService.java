@@ -232,7 +232,7 @@ public class UserService {
                     throw new ResourceNotFoundException("Utilisateur", existingUser.getId());
                 }
                 
-                // Envoyer l'email avec le mot de passe temporaire
+                // Envoyer l'email avec le mot de passe temporaire (après le commit de la transaction)
                 sendTemporaryPasswordEmail(trimmedEmail, temporaryPassword);
                 
                 log.info("Mot de passe temporaire régénéré pour l'utilisateur: {}", trimmedEmail);
@@ -283,7 +283,7 @@ public class UserService {
                         throw new ResourceNotFoundException("Utilisateur", existingUser.getId());
                     }
                     
-                    // Envoyer l'email avec le mot de passe temporaire
+                    // Envoyer l'email avec le mot de passe temporaire (après le commit de la transaction)
                     sendTemporaryPasswordEmail(trimmedEmail, temporaryPassword);
                     
                     // Recharger l'utilisateur avec les nouveaux rôles
@@ -333,8 +333,9 @@ public class UserService {
                 .roles(Set.of(businessOwnerRole))
                 .build();
 
+        User savedUser;
         try {
-            user = userRepository.save(user);
+            savedUser = userRepository.save(user);
             entityManager.flush(); // Forcer le flush pour détecter immédiatement les violations de contrainte
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
             // Violation de contrainte détectée - vérifier si c'est un utilisateur supprimé ou actif
@@ -345,11 +346,12 @@ public class UserService {
             if (deleteSoftDeletedUserByEmail(trimmedEmail)) {
                 // Réessayer de créer l'utilisateur après la suppression
                 try {
-                    user = userRepository.save(user);
+                    savedUser = userRepository.save(user);
                     entityManager.flush();
                     log.info("Utilisateur créé avec succès après suppression de l'utilisateur supprimé: {}", trimmedEmail);
+                    // Envoyer l'email avec le mot de passe temporaire (après le commit de la transaction)
                     sendTemporaryPasswordEmail(trimmedEmail, temporaryPassword);
-                    return mapper.toDto(user);
+                    return mapper.toDto(savedUser);
                 } catch (org.springframework.dao.DataIntegrityViolationException retryException) {
                     log.warn("Violation de contrainte persistante après suppression, chargement de l'utilisateur existant: {}", trimmedEmail);
                     // Continuer pour charger l'utilisateur actif
@@ -385,11 +387,18 @@ public class UserService {
             return mapper.toDto(existingUser);
         }
 
-        // Envoyer l'email avec le mot de passe temporaire
-        sendTemporaryPasswordEmail(trimmedEmail, temporaryPassword);
+        // Envoyer l'email avec le mot de passe temporaire (après le commit de la transaction)
+        // S'assurer que l'email est toujours envoyé même si une exception se produit après
+        try {
+            sendTemporaryPasswordEmail(trimmedEmail, temporaryPassword);
+            log.info("Email avec mot de passe temporaire envoyé à: {}", trimmedEmail);
+        } catch (Exception e) {
+            log.error("Erreur lors de l'envoi de l'email à {}: {}", trimmedEmail, e.getMessage(), e);
+            // Ne pas faire échouer la création si l'email échoue, mais logger l'erreur
+        }
 
         log.info("Propriétaire d'entreprise créé avec email: {}", trimmedEmail);
-        return mapper.toDto(user);
+        return mapper.toDto(savedUser);
     }
 
     /**
@@ -869,9 +878,10 @@ public class UserService {
         String loginUrl = frontendUrl + "/auth/login";
         try {
             mailService.sendTemporaryPassword(email, temporaryPassword, loginUrl);
+            log.info("Email avec mot de passe temporaire envoyé avec succès à: {}", email);
         } catch (Exception e) {
-            log.warn("Erreur lors de l'envoi de l'email avec le mot de passe temporaire à {}: {}", email, e.getMessage());
-            // Ne pas faire échouer l'opération si l'email échoue
+            log.error("Erreur lors de l'envoi de l'email avec le mot de passe temporaire à {}: {}", email, e.getMessage(), e);
+            // Ne pas faire échouer l'opération si l'email échoue, mais logger l'erreur avec plus de détails
         }
     }
 
