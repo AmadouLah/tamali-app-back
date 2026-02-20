@@ -75,7 +75,15 @@ public class ReceiptPdfService {
             html = html.replace(entry.getKey(), entry.getValue());
         }
 
-        return "<!DOCTYPE html><html><head><style>" + css + "</style></head><body>" + html + "</body></html>";
+        String fullHtml = "<!DOCTYPE html><html><head><style>" + css + "</style></head><body>" + html + "</body></html>";
+        return sanitizeForXhtml(fullHtml);
+    }
+
+    /** Rend le HTML compatible XHTML pour openhtmltopdf (balises vides auto-fermées). */
+    private String sanitizeForXhtml(String html) {
+        return html.replaceAll("<hr\\s*>", "<hr />")
+                .replaceAll("<br\\s*>", "<br />")
+                .replaceAll("<img([^>]*[^/])>", "<img$1 />");
     }
 
     private String buildLogoHtml(String logoUrl) {

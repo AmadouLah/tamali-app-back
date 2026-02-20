@@ -67,10 +67,10 @@ public class ReceiptTemplateInitializationService implements CommandLineRunner {
                         <p>${BUSINESS_ADDRESS}</p>
                         <p>Tél: ${BUSINESS_PHONE} | Email: ${BUSINESS_EMAIL}</p>
                     </div>
-                    <hr>
+                    <hr />
                     <p><strong>Reçu N°:</strong> ${SALE_ID}</p>
                     <p><strong>Date:</strong> ${SALE_DATE}</p>
-                    <hr>
+                    <hr />
                     <table>
                         <thead>
                             <tr>
@@ -84,11 +84,11 @@ public class ReceiptTemplateInitializationService implements CommandLineRunner {
                             ${ITEMS}
                         </tbody>
                     </table>
-                    <hr>
+                    <hr />
                     <p><strong>Sous-total:</strong> ${SUBTOTAL}</p>
                     <p><strong>TVA:</strong> ${TAX}</p>
                     <p><strong>Total:</strong> ${TOTAL}</p>
-                    <hr>
+                    <hr />
                     <p class="footer">Merci de votre visite !</p>
                 </div>
                 """;
