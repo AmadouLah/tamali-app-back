@@ -132,7 +132,7 @@ public class SaleService {
                 .build();
         paymentRepository.save(payment);
 
-        String invoiceNumber = "INV-" + sale.getSaleDate().toLocalDate().toString().replace("-", "") + "-" + sale.getId().toString().substring(0, 8).toUpperCase();
+        String invoiceNumber = "INV-" + sale.getId().toString().replace("-", "").toUpperCase();
         Invoice invoice = Invoice.builder()
                 .sale(sale)
                 .invoiceNumber(invoiceNumber)
