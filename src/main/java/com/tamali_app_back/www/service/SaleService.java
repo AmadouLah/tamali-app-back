@@ -86,7 +86,7 @@ public class SaleService {
             BigDecimal price = product.getUnitPrice();
             BigDecimal itemTotal = price.multiply(BigDecimal.valueOf(req.quantity()));
             BigDecimal itemTax = BigDecimal.ZERO;
-            if (taxEnabled && product.isTaxable() && taxRate.compareTo(BigDecimal.ZERO) > 0) {
+            if (taxEnabled && taxRate.compareTo(BigDecimal.ZERO) > 0 && product.isTaxable()) {
                 itemTax = itemTotal.multiply(taxRate).setScale(4, RoundingMode.HALF_UP);
             }
             totalAmount = totalAmount.add(itemTotal).add(itemTax);
@@ -110,6 +110,9 @@ public class SaleService {
                 .build();
         for (SaleItem si : entityItems) si.setSale(sale);
         sale = saleRepository.save(sale);
+        
+        log.debug("Vente créée - ID: {}, Total: {}, TVA: {}, TVA configurée: {}, TVA activée: {}", 
+                sale.getId(), totalAmount, taxAmount, taxConfig != null, taxEnabled);
 
         for (SaleItem si : sale.getItems()) {
             Stock stock = stockRepository.findByProductId(si.getProduct().getId()).orElseThrow();

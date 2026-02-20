@@ -61,19 +61,26 @@ public class ReceiptPdfService {
 
         String logoHtml = buildLogoHtml(business.getLogoUrl());
 
-        // Récupérer la configuration de TVA
         TaxConfiguration taxConfig = taxConfigurationRepository.findByBusinessId(business.getId()).orElse(null);
         BigDecimal taxAmount = sale.getTaxAmount() != null ? sale.getTaxAmount() : BigDecimal.ZERO;
         BigDecimal subtotal = sale.getTotalAmount().subtract(taxAmount);
         
-        // Calculer le taux de TVA affiché
         String taxRateDisplay = "";
-        if (taxConfig != null && taxConfig.isEnabled() && taxConfig.getRate() != null && taxAmount.compareTo(BigDecimal.ZERO) > 0) {
+        boolean showTaxRate = taxConfig != null && taxConfig.isEnabled() && taxConfig.getRate() != null && taxConfig.getRate().compareTo(BigDecimal.ZERO) > 0;
+        if (showTaxRate) {
             taxRateDisplay = String.format(" (%.0f%%)", taxConfig.getRate().doubleValue());
         }
         
-        // Construire le libellé TVA avec le taux
         String taxLabel = "TVA" + taxRateDisplay + ":";
+        String taxValue = formatMoney(taxAmount);
+
+        log.debug("Génération reçu - Vente ID: {}, TVA configurée: {}, TVA activée: {}, Taux: {}, Montant TVA: {}, Sous-total: {}", 
+                sale.getId(), 
+                taxConfig != null, 
+                taxConfig != null && taxConfig.isEnabled(),
+                taxConfig != null && taxConfig.getRate() != null ? taxConfig.getRate() : "N/A",
+                taxAmount,
+                subtotal);
 
         Map<String, String> variables = new HashMap<>();
         variables.put("${BUSINESS_LOGO}", logoHtml);
@@ -85,7 +92,7 @@ public class ReceiptPdfService {
         variables.put("${SALE_ID}", sale.getId().toString());
         variables.put("${ITEMS}", buildItemsHtml(sale));
         variables.put("${SUBTOTAL}", formatMoney(subtotal));
-        variables.put("${TAX}", formatMoney(taxAmount));
+        variables.put("${TAX}", taxValue);
         variables.put("${TAX_LABEL}", taxLabel);
         variables.put("${TOTAL}", formatMoney(sale.getTotalAmount()));
 

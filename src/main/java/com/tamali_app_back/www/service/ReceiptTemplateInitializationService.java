@@ -129,7 +129,7 @@ public class ReceiptTemplateInitializationService implements CommandLineRunner {
                             <tr>
                                 <th>Article</th>
                                 <th>Qté</th>
-                                <th>Prix</th>
+                                <th>P.U</th>
                                 <th>Total</th>
                             </tr>
                         </thead>
@@ -176,7 +176,7 @@ public class ReceiptTemplateInitializationService implements CommandLineRunner {
                             <tr>
                                 <th>Article</th>
                                 <th>Qté</th>
-                                <th>Prix</th>
+                                <th>P.U</th>
                                 <th>Total</th>
                             </tr>
                         </thead>
@@ -217,7 +217,7 @@ public class ReceiptTemplateInitializationService implements CommandLineRunner {
                             <tr>
                                 <th>Article</th>
                                 <th>Qté</th>
-                                <th>Prix</th>
+                                <th>P.U</th>
                                 <th>Total</th>
                             </tr>
                         </thead>
@@ -263,7 +263,7 @@ public class ReceiptTemplateInitializationService implements CommandLineRunner {
                             <tr>
                                 <th>Article</th>
                                 <th>Qté</th>
-                                <th>Prix</th>
+                                <th>P.U</th>
                                 <th>Total</th>
                             </tr>
                         </thead>
@@ -305,7 +305,7 @@ public class ReceiptTemplateInitializationService implements CommandLineRunner {
                             <tr>
                                 <th>Article</th>
                                 <th>Qté</th>
-                                <th>Prix</th>
+                                <th>P.U</th>
                                 <th>Total</th>
                             </tr>
                         </thead>
@@ -349,7 +349,7 @@ public class ReceiptTemplateInitializationService implements CommandLineRunner {
                             <tr>
                                 <th>Description</th>
                                 <th>Qté</th>
-                                <th>Prix</th>
+                                <th>P.U</th>
                                 <th>Total</th>
                             </tr>
                         </thead>
