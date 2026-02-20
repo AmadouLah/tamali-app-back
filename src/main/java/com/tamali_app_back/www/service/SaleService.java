@@ -180,7 +180,6 @@ public class SaleService {
             byte[] pdfBytes = receiptPdfService.generateReceiptPdf(sale);
             String receiptUrl = supabaseStorage.uploadReceiptPdf(sale.getBusiness().getId(), sale.getId(), pdfBytes);
             invoice.setReceiptPdfUrl(receiptUrl);
-            invoiceRepository.save(invoice);
         } catch (Exception e) {
             log.warn("Impossible d'uploader le reçu vers Supabase pour la vente {}: {}", sale.getId(), e.getMessage());
         }
