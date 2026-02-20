@@ -6,6 +6,7 @@ import com.tamali_app_back.www.dto.SaleDto;
 import com.tamali_app_back.www.dto.request.SaleItemRequest;
 import lombok.extern.slf4j.Slf4j;
 import com.tamali_app_back.www.entity.*;
+import com.tamali_app_back.www.exception.ResourceNotFoundException;
 import com.tamali_app_back.www.enums.MovementType;
 import com.tamali_app_back.www.enums.PaymentMethod;
 import com.tamali_app_back.www.repository.*;
@@ -155,6 +156,23 @@ public class SaleService {
     @Transactional
     public void markInvoiceSentByWhatsapp(UUID invoiceId) {
         invoiceService.markSentByWhatsapp(invoiceId);
+    }
+
+    /**
+     * Génère le PDF du reçu avec le template choisi par le propriétaire, l'upload vers Supabase et retourne l'URL.
+     */
+    @Transactional
+    public String generateAndUploadReceipt(UUID saleId) {
+        Sale sale = saleRepository.findById(saleId)
+                .orElseThrow(() -> new ResourceNotFoundException("Vente", saleId));
+        Invoice invoice = invoiceRepository.findBySaleId(saleId)
+                .orElseThrow(() -> new ResourceNotFoundException("Facture pour cette vente", saleId));
+
+        byte[] pdfBytes = receiptPdfService.generateReceiptPdf(sale);
+        String receiptUrl = supabaseStorage.uploadReceiptPdf(sale.getBusiness().getId(), sale.getId(), pdfBytes);
+        invoice.setReceiptPdfUrl(receiptUrl);
+        invoiceRepository.save(invoice);
+        return receiptUrl;
     }
 
     private void uploadReceiptToSupabase(Sale sale, Invoice invoice) {

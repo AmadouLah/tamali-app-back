@@ -14,6 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -49,6 +50,12 @@ public class SaleController {
         InvoiceDto dto = ResponseUtil.requireFound(
                 saleService.getInvoiceBySaleId(id), "Facture pour cette vente", id);
         return ResponseEntity.ok(dto);
+    }
+
+    @PostMapping("/sales/{id}/generate-receipt")
+    public ResponseEntity<Map<String, String>> generateReceipt(@PathVariable UUID id) {
+        String receiptPdfUrl = saleService.generateAndUploadReceipt(id);
+        return ResponseEntity.ok(Map.of("receiptPdfUrl", receiptPdfUrl));
     }
 
     @PostMapping("/businesses/{businessId}/sales")
