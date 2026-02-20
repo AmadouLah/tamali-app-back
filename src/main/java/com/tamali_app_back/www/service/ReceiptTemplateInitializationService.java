@@ -8,8 +8,10 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Service;
 
-import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -29,22 +31,73 @@ public class ReceiptTemplateInitializationService implements CommandLineRunner {
     }
 
     private void ensureReceiptTemplatesExist() {
-        if (receiptTemplateRepository.count() > 0) {
-            log.info("Templates de reçus déjà existants.");
-            return;
+        Map<String, ReceiptTemplate> existingTemplates = new HashMap<>();
+        receiptTemplateRepository.findAll().forEach(t -> existingTemplates.put(t.getCode(), t));
+
+        List<ReceiptTemplate> templatesToSave = new ArrayList<>();
+        
+        // Template Classique
+        ReceiptTemplate classic = existingTemplates.get("classic");
+        if (classic == null) {
+            classic = createTemplate("classic", "Classique", getClassicHtml(), getClassicCss(), true);
+        } else {
+            classic.setHtmlContent(getClassicHtml());
+            classic.setCssContent(getClassicCss());
         }
+        templatesToSave.add(classic);
 
-        List<ReceiptTemplate> templates = Arrays.asList(
-                createTemplate("classic", "Classique", getClassicHtml(), getClassicCss(), true),
-                createTemplate("modern", "Moderne", getModernHtml(), getModernCss(), false),
-                createTemplate("minimal", "Minimaliste", getMinimalHtml(), getMinimalCss(), false),
-                createTemplate("elegant", "Élégant", getElegantHtml(), getElegantCss(), false),
-                createTemplate("colorful", "Coloré", getColorfulHtml(), getColorfulCss(), false),
-                createTemplate("professional", "Professionnel", getProfessionalHtml(), getProfessionalCss(), false)
-        );
+        // Template Moderne
+        ReceiptTemplate modern = existingTemplates.get("modern");
+        if (modern == null) {
+            modern = createTemplate("modern", "Moderne", getModernHtml(), getModernCss(), false);
+        } else {
+            modern.setHtmlContent(getModernHtml());
+            modern.setCssContent(getModernCss());
+        }
+        templatesToSave.add(modern);
 
-        receiptTemplateRepository.saveAll(templates);
-        log.info("{} templates de reçus créés.", templates.size());
+        // Template Minimaliste
+        ReceiptTemplate minimal = existingTemplates.get("minimal");
+        if (minimal == null) {
+            minimal = createTemplate("minimal", "Minimaliste", getMinimalHtml(), getMinimalCss(), false);
+        } else {
+            minimal.setHtmlContent(getMinimalHtml());
+            minimal.setCssContent(getMinimalCss());
+        }
+        templatesToSave.add(minimal);
+
+        // Template Élégant
+        ReceiptTemplate elegant = existingTemplates.get("elegant");
+        if (elegant == null) {
+            elegant = createTemplate("elegant", "Élégant", getElegantHtml(), getElegantCss(), false);
+        } else {
+            elegant.setHtmlContent(getElegantHtml());
+            elegant.setCssContent(getElegantCss());
+        }
+        templatesToSave.add(elegant);
+
+        // Template Coloré
+        ReceiptTemplate colorful = existingTemplates.get("colorful");
+        if (colorful == null) {
+            colorful = createTemplate("colorful", "Coloré", getColorfulHtml(), getColorfulCss(), false);
+        } else {
+            colorful.setHtmlContent(getColorfulHtml());
+            colorful.setCssContent(getColorfulCss());
+        }
+        templatesToSave.add(colorful);
+
+        // Template Professionnel
+        ReceiptTemplate professional = existingTemplates.get("professional");
+        if (professional == null) {
+            professional = createTemplate("professional", "Professionnel", getProfessionalHtml(), getProfessionalCss(), false);
+        } else {
+            professional.setHtmlContent(getProfessionalHtml());
+            professional.setCssContent(getProfessionalCss());
+        }
+        templatesToSave.add(professional);
+
+        receiptTemplateRepository.saveAll(templatesToSave);
+        log.info("{} templates de reçus initialisés/mis à jour.", templatesToSave.size());
     }
 
     private ReceiptTemplate createTemplate(String code, String name, String html, String css, boolean isDefault) {
@@ -86,7 +139,7 @@ public class ReceiptTemplateInitializationService implements CommandLineRunner {
                     </table>
                     <hr />
                     <p><strong>Sous-total:</strong> ${SUBTOTAL}</p>
-                    <p><strong>TVA:</strong> ${TAX}</p>
+                    <p><strong>${TAX_LABEL}</strong> ${TAX}</p>
                     <p><strong>Total:</strong> ${TOTAL}</p>
                     <hr />
                     <p class="footer">Merci de votre visite !</p>
@@ -131,7 +184,7 @@ public class ReceiptTemplateInitializationService implements CommandLineRunner {
                     </table>
                     <div class="totals">
                         <div>Sous-total: ${SUBTOTAL}</div>
-                        <div>TVA: ${TAX}</div>
+                        <div>${TAX_LABEL} ${TAX}</div>
                         <div class="total">Total: ${TOTAL}</div>
                     </div>
                 </div>
@@ -170,7 +223,11 @@ public class ReceiptTemplateInitializationService implements CommandLineRunner {
                         </thead>
                         <tbody>${ITEMS}</tbody>
                     </table>
-                    <div class="total">Total: ${TOTAL}</div>
+                    <div class="summary-minimal">
+                        <div>Sous-total: ${SUBTOTAL}</div>
+                        <div>${TAX_LABEL} ${TAX}</div>
+                        <div class="total">Total: ${TOTAL}</div>
+                    </div>
                 </div>
                 """;
     }
@@ -183,7 +240,8 @@ public class ReceiptTemplateInitializationService implements CommandLineRunner {
                 h3 { margin-bottom: 10px; margin-top: 8px; }
                 table { width: 100%; border-collapse: collapse; margin: 10px 0; }
                 th, td { padding: 5px; text-align: left; border-bottom: 1px solid #000; }
-                .total { font-weight: bold; margin-top: 15px; border-top: 1px solid #000; padding-top: 10px; }
+                .summary-minimal { margin-top: 15px; border-top: 1px solid #000; padding-top: 10px; }
+                .total { font-weight: bold; margin-top: 5px; }
                 """;
     }
 
@@ -213,7 +271,7 @@ public class ReceiptTemplateInitializationService implements CommandLineRunner {
                     </table>
                     <div class="summary">
                         <p>Sous-total: ${SUBTOTAL}</p>
-                        <p>TVA: ${TAX}</p>
+                        <p>${TAX_LABEL} ${TAX}</p>
                         <p class="grand-total">Total: ${TOTAL}</p>
                     </div>
                 </div>
@@ -255,7 +313,7 @@ public class ReceiptTemplateInitializationService implements CommandLineRunner {
                     </table>
                     <div class="totals-color">
                         <p>Sous-total: ${SUBTOTAL}</p>
-                        <p>TVA: ${TAX}</p>
+                        <p>${TAX_LABEL} ${TAX}</p>
                         <p class="total-color">Total: ${TOTAL}</p>
                     </div>
                 </div>
@@ -299,7 +357,7 @@ public class ReceiptTemplateInitializationService implements CommandLineRunner {
                     </table>
                     <div class="totals-professional">
                         <div class="row"><span>Sous-total:</span><span>${SUBTOTAL}</span></div>
-                        <div class="row"><span>TVA:</span><span>${TAX}</span></div>
+                        <div class="row"><span>${TAX_LABEL}</span><span>${TAX}</span></div>
                         <div class="row total-row"><span>Total:</span><span>${TOTAL}</span></div>
                     </div>
                 </div>

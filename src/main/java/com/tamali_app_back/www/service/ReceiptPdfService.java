@@ -5,6 +5,8 @@ import com.tamali_app_back.www.entity.Business;
 import com.tamali_app_back.www.entity.ReceiptTemplate;
 import com.tamali_app_back.www.entity.Sale;
 import com.tamali_app_back.www.entity.SaleItem;
+import com.tamali_app_back.www.entity.TaxConfiguration;
+import com.tamali_app_back.www.repository.TaxConfigurationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -25,6 +27,7 @@ public class ReceiptPdfService {
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
 
     private final ReceiptTemplateService receiptTemplateService;
+    private final TaxConfigurationRepository taxConfigurationRepository;
 
     public byte[] generateReceiptPdf(Sale sale) {
         Business business = sale.getBusiness();
@@ -58,6 +61,20 @@ public class ReceiptPdfService {
 
         String logoHtml = buildLogoHtml(business.getLogoUrl());
 
+        // Récupérer la configuration de TVA
+        TaxConfiguration taxConfig = taxConfigurationRepository.findByBusinessId(business.getId()).orElse(null);
+        BigDecimal taxAmount = sale.getTaxAmount() != null ? sale.getTaxAmount() : BigDecimal.ZERO;
+        BigDecimal subtotal = sale.getTotalAmount().subtract(taxAmount);
+        
+        // Calculer le taux de TVA affiché
+        String taxRateDisplay = "";
+        if (taxConfig != null && taxConfig.isEnabled() && taxConfig.getRate() != null && taxAmount.compareTo(BigDecimal.ZERO) > 0) {
+            taxRateDisplay = String.format(" (%.0f%%)", taxConfig.getRate().doubleValue());
+        }
+        
+        // Construire le libellé TVA avec le taux
+        String taxLabel = "TVA" + taxRateDisplay + ":";
+
         Map<String, String> variables = new HashMap<>();
         variables.put("${BUSINESS_LOGO}", logoHtml);
         variables.put("${BUSINESS_NAME}", business.getName() != null ? business.getName() : "");
@@ -67,8 +84,9 @@ public class ReceiptPdfService {
         variables.put("${SALE_DATE}", sale.getSaleDate().format(DATE_FORMATTER));
         variables.put("${SALE_ID}", sale.getId().toString());
         variables.put("${ITEMS}", buildItemsHtml(sale));
-        variables.put("${SUBTOTAL}", formatMoney(sale.getTotalAmount().subtract(sale.getTaxAmount() != null ? sale.getTaxAmount() : BigDecimal.ZERO)));
-        variables.put("${TAX}", formatMoney(sale.getTaxAmount() != null ? sale.getTaxAmount() : BigDecimal.ZERO));
+        variables.put("${SUBTOTAL}", formatMoney(subtotal));
+        variables.put("${TAX}", formatMoney(taxAmount));
+        variables.put("${TAX_LABEL}", taxLabel);
         variables.put("${TOTAL}", formatMoney(sale.getTotalAmount()));
 
         for (Map.Entry<String, String> entry : variables.entrySet()) {

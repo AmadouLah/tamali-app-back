@@ -78,19 +78,28 @@ public class SupabaseStorageService {
 
     /**
      * Upload un PDF (reçu) vers Supabase Storage et retourne l'URL publique.
+     * Utilise upsert pour écraser si le reçu existe déjà (ex: régénération).
      */
     public String uploadReceiptPdf(UUID businessId, UUID saleId, byte[] pdfBytes) {
         if (supabaseUrl.isBlank() || serviceRoleKey.isBlank()) {
             throw new IllegalStateException("Supabase storage non configuré.");
         }
         String path = "receipts/" + businessId + "/" + saleId + ".pdf";
-        return uploadBytes(path, pdfBytes, "application/pdf");
+        return uploadBytes(path, pdfBytes, "application/pdf", true);
     }
 
     /**
      * Upload de contenu binaire vers Supabase Storage.
      */
     public String uploadBytes(String path, byte[] content, String contentType) {
+        return uploadBytes(path, content, contentType, false);
+    }
+
+    /**
+     * Upload de contenu binaire vers Supabase Storage.
+     * @param upsert si true, écrase le fichier existant (évite 409 Duplicate)
+     */
+    public String uploadBytes(String path, byte[] content, String contentType, boolean upsert) {
         if (supabaseUrl.isBlank() || serviceRoleKey.isBlank()) {
             throw new IllegalStateException("Supabase storage non configuré.");
         }
@@ -98,6 +107,9 @@ public class SupabaseStorageService {
         HttpHeaders headers = new HttpHeaders();
         headers.set("Authorization", "Bearer " + serviceRoleKey);
         headers.set("apikey", serviceRoleKey);
+        if (upsert) {
+            headers.set("x-upsert", "true");
+        }
 
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
         String filename = path.substring(path.lastIndexOf('/') + 1);
