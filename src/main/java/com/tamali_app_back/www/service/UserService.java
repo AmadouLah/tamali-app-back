@@ -980,6 +980,74 @@ public class UserService {
     }
 
     /**
+     * Change le mot de passe d'un utilisateur (changement volontaire, sans contrainte mustChangePassword).
+     * Utilisé depuis la page Profil pour permettre à l'utilisateur de modifier son mot de passe.
+     */
+    @Transactional
+    public UserDto changePassword(UUID userId, String currentPassword, String newPassword) {
+        entityManager.clear();
+
+        User user = loadUserByIdWithoutInvalidRoles(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Utilisateur", userId));
+
+        if (!user.isEnabled()) {
+            throw new BadRequestException("Le compte n'est pas activé.");
+        }
+
+        if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
+            throw new BadRequestException("Mot de passe actuel incorrect.");
+        }
+
+        boolean hadAssociateRole = user.getRoles().stream()
+                .anyMatch(role -> role.getType() == RoleType.BUSINESS_ASSOCIATE);
+        UUID businessId = user.getBusiness() != null ? user.getBusiness().getId() : null;
+
+        String encodedNewPassword = passwordEncoder.encode(newPassword);
+
+        Query updateQuery = entityManager.createNativeQuery(
+                "UPDATE users SET password = :password, updated_at = :updatedAt " +
+                        "WHERE id = :userId AND deleted_at IS NULL"
+        );
+        updateQuery.setParameter("password", encodedNewPassword);
+        updateQuery.setParameter("updatedAt", Timestamp.valueOf(LocalDateTime.now()));
+        updateQuery.setParameter("userId", userId);
+        int updated = updateQuery.executeUpdate();
+
+        if (updated == 0) {
+            throw new ResourceNotFoundException("Utilisateur", userId);
+        }
+
+        if (hadAssociateRole && businessId != null) {
+            Role associateRole = roleRepository.findByType(RoleType.BUSINESS_ASSOCIATE)
+                    .orElseThrow(() -> new IllegalStateException("Rôle BUSINESS_ASSOCIATE introuvable."));
+
+            Query checkRoleQuery = entityManager.createNativeQuery(
+                    "SELECT COUNT(*) FROM user_roles WHERE user_id = :userId AND role_id = :roleId"
+            );
+            checkRoleQuery.setParameter("userId", userId);
+            checkRoleQuery.setParameter("roleId", associateRole.getId());
+            Long roleCount = ((Number) checkRoleQuery.getSingleResult()).longValue();
+
+            if (roleCount == 0) {
+                Query insertRoleQuery = entityManager.createNativeQuery(
+                        "INSERT INTO user_roles (user_id, role_id) VALUES (:userId, :roleId)"
+                );
+                insertRoleQuery.setParameter("userId", userId);
+                insertRoleQuery.setParameter("roleId", associateRole.getId());
+                insertRoleQuery.executeUpdate();
+                entityManager.flush();
+            }
+        }
+
+        entityManager.clear();
+        User updatedUser = loadUserByIdWithoutInvalidRoles(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Utilisateur", userId));
+
+        log.info("Mot de passe changé pour l'utilisateur: {}", updatedUser.getEmail());
+        return mapper.toDto(updatedUser);
+    }
+
+    /**
      * Met à jour un utilisateur (businessId, firstname, lastname).
      * Utilise une requête native pour éviter les conflits d'optimistic locking.
      */

@@ -119,6 +119,17 @@ public class UserController {
     }
 
     /**
+     * Change le mot de passe d'un utilisateur (changement volontaire depuis Profil).
+     */
+    @PostMapping("/{id}/change-password")
+    public ResponseEntity<UserDto> changePassword(
+            @PathVariable UUID id,
+            @Valid @RequestBody ChangeTemporaryPasswordRequest request) {
+        UserDto dto = userService.changePassword(id, request.currentPassword(), request.newPassword());
+        return ResponseEntity.ok(dto);
+    }
+
+    /**
      * Met à jour un utilisateur (businessId, firstname, lastname).
      */
     @PatchMapping("/{id}")
