@@ -42,7 +42,7 @@ public class StockMovementService {
     public StockMovementDto create(UUID productId, int quantity, MovementType type) {
         Product product = productRepository.findById(productId).orElse(null);
         if (product == null) return null;
-        Stock stock = stockRepository.findByProductId(productId).orElse(null);
+        Stock stock = stockRepository.findByProductIdForUpdate(productId).orElse(null);
         if (stock == null) return null;
         if (type == MovementType.OUT || type == MovementType.SALE) {
             if (stock.getQuantity() < quantity) return null;

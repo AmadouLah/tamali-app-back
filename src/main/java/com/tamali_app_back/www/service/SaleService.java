@@ -6,6 +6,7 @@ import com.tamali_app_back.www.dto.SaleDto;
 import com.tamali_app_back.www.dto.request.SaleItemRequest;
 import lombok.extern.slf4j.Slf4j;
 import com.tamali_app_back.www.entity.*;
+import com.tamali_app_back.www.exception.BadRequestException;
 import com.tamali_app_back.www.exception.ResourceNotFoundException;
 import com.tamali_app_back.www.enums.MovementType;
 import com.tamali_app_back.www.enums.PaymentMethod;
@@ -115,7 +116,11 @@ public class SaleService {
                 sale.getId(), totalAmount, taxAmount, taxConfig != null, taxEnabled);
 
         for (SaleItem si : sale.getItems()) {
-            Stock stock = stockRepository.findByProductId(si.getProduct().getId()).orElseThrow();
+            Stock stock = stockRepository.findByProductIdForUpdate(si.getProduct().getId()).orElseThrow();
+            if (stock.getQuantity() < si.getQuantity()) {
+                throw new BadRequestException(
+                        "Stock insuffisant pour le produit " + si.getProduct().getName());
+            }
             stock.setQuantity(stock.getQuantity() - si.getQuantity());
             stockRepository.save(stock);
             StockMovement mov = StockMovement.builder()
