@@ -301,7 +301,7 @@ public class UserService {
                 }
                 
                 // Envoyer l'email avec le mot de passe temporaire (après le commit de la transaction)
-                sendTemporaryPasswordEmail(trimmedEmail, temporaryPassword);
+                sendTemporaryPasswordEmail(trimmedEmail, temporaryPassword, true);
                 
                 log.info("Mot de passe temporaire régénéré pour l'utilisateur: {}", trimmedEmail);
                 return mapper.toDto(existingUser);
@@ -352,7 +352,7 @@ public class UserService {
                     }
                     
                     // Envoyer l'email avec le mot de passe temporaire (après le commit de la transaction)
-                    sendTemporaryPasswordEmail(trimmedEmail, temporaryPassword);
+                    sendTemporaryPasswordEmail(trimmedEmail, temporaryPassword, true);
                     
                     // Recharger l'utilisateur avec les nouveaux rôles
                     entityManager.clear();
@@ -418,7 +418,7 @@ public class UserService {
                     entityManager.flush();
                     log.info("Utilisateur créé avec succès après suppression de l'utilisateur supprimé: {}", trimmedEmail);
                     // Envoyer l'email avec le mot de passe temporaire (après le commit de la transaction)
-                    sendTemporaryPasswordEmail(trimmedEmail, temporaryPassword);
+                    sendTemporaryPasswordEmail(trimmedEmail, temporaryPassword, true);
                     return mapper.toDto(savedUser);
                 } catch (org.springframework.dao.DataIntegrityViolationException retryException) {
                     log.warn("Violation de contrainte persistante après suppression, chargement de l'utilisateur existant: {}", trimmedEmail);
@@ -457,7 +457,7 @@ public class UserService {
 
         // Envoyer l'email avec le mot de passe temporaire (après le commit de la transaction)
         // S'assurer que l'email est toujours tenté même si une exception se produit après
-        sendTemporaryPasswordEmail(trimmedEmail, temporaryPassword);
+        sendTemporaryPasswordEmail(trimmedEmail, temporaryPassword, true);
 
         log.info("Propriétaire d'entreprise créé avec email: {}", trimmedEmail);
         return mapper.toDto(savedUser);
@@ -678,7 +678,7 @@ public class UserService {
             log.info("Vérification finale pour utilisateur existant: {} rôles BUSINESS_ASSOCIATE trouvés pour l'utilisateur {}", 
                     verifiedRoleCount, existingUser.getId());
             
-            sendTemporaryPasswordEmail(trimmedEmail, temporaryPassword);
+            sendTemporaryPasswordEmail(trimmedEmail, temporaryPassword, false);
             
             entityManager.clear();
             User updatedUser = loadUserByIdWithoutInvalidRoles(existingUser.getId())
@@ -868,7 +868,7 @@ public class UserService {
             return mapper.toDto(existingUser);
         }
         
-        sendTemporaryPasswordEmail(trimmedEmail, temporaryPassword);
+        sendTemporaryPasswordEmail(trimmedEmail, temporaryPassword, false);
         
         // Recharger l'associé depuis la base de données pour s'assurer que toutes les relations sont chargées
         entityManager.clear();
@@ -1915,13 +1915,12 @@ public class UserService {
 
     /**
      * Envoie un email avec le mot de passe temporaire à l'utilisateur.
-     * Méthode centralisée pour éviter la duplication de code.
-     * Cette méthode ne propage pas les exceptions pour ne pas faire échouer la création de l'utilisateur.
+     * @param isOwner true pour un propriétaire, false pour un associé
      */
-    private void sendTemporaryPasswordEmail(String email, String temporaryPassword) {
+    private void sendTemporaryPasswordEmail(String email, String temporaryPassword, boolean isOwner) {
         String loginUrl = frontendUrl + "/auth/login";
         try {
-            mailService.sendTemporaryPassword(email, temporaryPassword, loginUrl);
+            mailService.sendTemporaryPassword(email, temporaryPassword, loginUrl, isOwner);
             log.info("Email avec mot de passe temporaire envoyé avec succès à: {}", email);
         } catch (Exception e) {
             log.error("ÉCHEC de l'envoi de l'email avec le mot de passe temporaire à {}: {}", email, e.getMessage(), e);

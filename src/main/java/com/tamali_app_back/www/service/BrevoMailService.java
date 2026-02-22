@@ -106,8 +106,8 @@ public class BrevoMailService implements MailService {
     }
 
     @Override
-    public void sendTemporaryPassword(String toEmail, String temporaryPassword, String loginUrl) {
-        String html = TemporaryPasswordEmailTemplate.buildHtml(temporaryPassword, loginUrl);
+    public void sendTemporaryPassword(String toEmail, String temporaryPassword, String loginUrl, boolean isOwner) {
+        String html = TemporaryPasswordEmailTemplate.buildHtml(temporaryPassword, loginUrl, isOwner);
         Map<String, Object> body = Map.of(
                 "sender", Map.of("email", fromEmail, "name", fromName),
                 "to", List.of(Map.of("email", toEmail)),

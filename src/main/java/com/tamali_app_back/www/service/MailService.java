@@ -34,6 +34,7 @@ public interface MailService {
      * @param toEmail destinataire
      * @param temporaryPassword mot de passe temporaire de 10 caractères
      * @param loginUrl URL de la page de connexion
+     * @param isOwner true pour un propriétaire d'entreprise, false pour un associé
      */
-    void sendTemporaryPassword(String toEmail, String temporaryPassword, String loginUrl);
+    void sendTemporaryPassword(String toEmail, String temporaryPassword, String loginUrl, boolean isOwner);
 }

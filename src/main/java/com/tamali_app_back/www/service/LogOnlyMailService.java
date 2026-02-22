@@ -25,7 +25,7 @@ public class LogOnlyMailService implements MailService {
     }
 
     @Override
-    public void sendTemporaryPassword(String toEmail, String temporaryPassword, String loginUrl) {
-        log.info("[MAIL] Mot de passe temporaire pour {} : {} - Lien: {}", toEmail, temporaryPassword, loginUrl);
+    public void sendTemporaryPassword(String toEmail, String temporaryPassword, String loginUrl, boolean isOwner) {
+        log.info("[MAIL] Mot de passe temporaire pour {} ({}): {} - Lien: {}", toEmail, isOwner ? "propriétaire" : "associé", temporaryPassword, loginUrl);
     }
 }

@@ -5,17 +5,23 @@ package com.tamali_app_back.www.service;
  */
 public final class TemporaryPasswordEmailTemplate {
 
-    private static final String SENDER_NAME = "Tamali";
+    private static final String OWNER_INTRO = "Votre compte propriétaire d'entreprise a été créé. Voici vos identifiants temporaires :";
+    private static final String ASSOCIATE_INTRO = "Vous avez été invité à rejoindre une entreprise en tant qu'associé. Voici vos identifiants temporaires pour accéder au tableau de bord :";
 
     private TemporaryPasswordEmailTemplate() {}
 
     /**
      * Construit le HTML de l'email avec le mot de passe temporaire et le lien de connexion.
+     * @param isOwner true pour un propriétaire d'entreprise, false pour un associé
      */
-    public static String buildHtml(String temporaryPassword, String loginUrl) {
+    public static String buildHtml(String temporaryPassword, String loginUrl, boolean isOwner) {
         String escapedPassword = escapeHtml(temporaryPassword != null ? temporaryPassword : "");
         String escapedUrl = escapeHtml(loginUrl != null ? loginUrl : "");
-        
+        String intro = escapeHtml(isOwner ? OWNER_INTRO : ASSOCIATE_INTRO);
+        return buildEmailBody(escapedPassword, escapedUrl, intro);
+    }
+
+    private static String buildEmailBody(String escapedPassword, String escapedUrl, String intro) {
         String template = """
             <!DOCTYPE html>
             <html>
@@ -31,7 +37,7 @@ public final class TemporaryPasswordEmailTemplate {
                     <p style="margin:0 0 8px; font-size:14px; color:#64748b; text-align:center;">Bienvenue sur</p>
                     <p style="margin:0 0 32px; font-size:28px; font-weight:600; color:#0f172a; text-align:center;">Tamali</p>
                     <p style="margin:0 0 24px; font-size:15px; color:#475569; line-height:1.6;">
-                      Votre compte propriétaire d'entreprise a été créé. Voici vos identifiants temporaires :
+                      INTRO_PLACEHOLDER
                     </p>
                     <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:20px; margin:24px 0;">
                       <p style="margin:0 0 8px; font-size:13px; color:#64748b; font-weight:500;">MOT DE PASSE TEMPORAIRE</p>
@@ -57,8 +63,8 @@ public final class TemporaryPasswordEmailTemplate {
             </body>
             </html>
             """;
-        
-        return template.replace("PASSWORD_PLACEHOLDER", escapedPassword)
+        return template.replace("INTRO_PLACEHOLDER", intro)
+                      .replace("PASSWORD_PLACEHOLDER", escapedPassword)
                       .replace("LOGIN_URL_PLACEHOLDER", escapedUrl);
     }
     
