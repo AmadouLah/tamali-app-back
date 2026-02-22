@@ -74,8 +74,10 @@ public class SaleService {
         BigDecimal totalAmount = BigDecimal.ZERO;
         BigDecimal taxAmount = BigDecimal.ZERO;
         TaxConfiguration taxConfig = taxConfigurationRepository.findByBusinessId(businessId).orElse(null);
-        boolean taxEnabled = taxConfig != null && taxConfig.isEnabled();
-        BigDecimal taxRate = taxConfig != null && taxConfig.getRate() != null ? taxConfig.getRate().divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP) : BigDecimal.ZERO;
+        // Taux TVA : config business si activée, sinon 18% pour produits taxables (cohérent avec le frontend)
+        BigDecimal taxRate = (taxConfig != null && taxConfig.isEnabled() && taxConfig.getRate() != null && taxConfig.getRate().compareTo(BigDecimal.ZERO) > 0)
+                ? taxConfig.getRate().divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP)
+                : new BigDecimal("0.18");
 
         BigDecimal onePlusTaxRate = BigDecimal.ONE.add(taxRate);
         List<SaleItem> entityItems = new ArrayList<>();
@@ -89,7 +91,7 @@ public class SaleService {
             BigDecimal itemLineTotal = price.multiply(BigDecimal.valueOf(req.quantity()));
             BigDecimal itemTax = BigDecimal.ZERO;
             BigDecimal itemTotalTTC = itemLineTotal;
-            if (taxEnabled && taxRate.compareTo(BigDecimal.ZERO) > 0 && product.isTaxable()) {
+            if (product.isTaxable()) {
                 // Produit taxable : prix stocké = TTC, on extrait HT et TVA
                 BigDecimal itemHT = itemLineTotal.divide(onePlusTaxRate, 4, RoundingMode.HALF_UP);
                 itemTax = itemLineTotal.subtract(itemHT).setScale(4, RoundingMode.HALF_UP);
@@ -116,8 +118,8 @@ public class SaleService {
         for (SaleItem si : entityItems) si.setSale(sale);
         sale = saleRepository.save(sale);
         
-        log.debug("Vente créée - ID: {}, Total: {}, TVA: {}, TVA configurée: {}, TVA activée: {}", 
-                sale.getId(), totalAmount, taxAmount, taxConfig != null, taxEnabled);
+        log.debug("Vente créée - ID: {}, Total: {}, TVA: {}, Taux: {}",
+                sale.getId(), totalAmount, taxAmount, taxRate);
 
         for (SaleItem si : sale.getItems()) {
             Stock stock = stockRepository.findByProductIdForUpdate(si.getProduct().getId()).orElseThrow();

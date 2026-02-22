@@ -66,9 +66,9 @@ public class ReceiptPdfService {
         BigDecimal subtotal = sale.getTotalAmount().subtract(taxAmount);
         
         String taxRateDisplay = "";
-        boolean showTaxRate = taxConfig != null && taxConfig.isEnabled() && taxConfig.getRate() != null && taxConfig.getRate().compareTo(BigDecimal.ZERO) > 0;
-        if (showTaxRate) {
-            taxRateDisplay = String.format(" (%.0f%%)", taxConfig.getRate().doubleValue());
+        if (taxAmount.compareTo(BigDecimal.ZERO) > 0) {
+            boolean fromConfig = taxConfig != null && taxConfig.isEnabled() && taxConfig.getRate() != null && taxConfig.getRate().compareTo(BigDecimal.ZERO) > 0;
+            taxRateDisplay = fromConfig ? String.format(" (%.0f%%)", taxConfig.getRate().doubleValue()) : " (18%)";
         }
         
         String subtotalLabel = taxAmount.compareTo(BigDecimal.ZERO) > 0 ? "Sous-total HT:" : "Sous-total:";
