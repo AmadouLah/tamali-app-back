@@ -119,6 +119,7 @@ public class ReceiptTemplateInitializationService implements CommandLineRunner {
                         <h2>${BUSINESS_NAME}</h2>
                         <p>${BUSINESS_ADDRESS}</p>
                         <p>Tél: ${BUSINESS_PHONE} | Email: ${BUSINESS_EMAIL}</p>
+                        ${COMMERCE_REGISTER}
                     </div>
                     <hr />
                     <p><strong>Reçu N°:</strong> ${SALE_ID}</p>
@@ -138,7 +139,7 @@ public class ReceiptTemplateInitializationService implements CommandLineRunner {
                         </tbody>
                     </table>
                     <hr />
-                    <p><strong>Sous-total:</strong> ${SUBTOTAL}</p>
+                    <p><strong>${SUBTOTAL_LABEL}</strong> ${SUBTOTAL}</p>
                     <p><strong>${TAX_LABEL}</strong> ${TAX}</p>
                     <p><strong>Total:</strong> ${TOTAL}</p>
                     <hr />
@@ -166,6 +167,7 @@ public class ReceiptTemplateInitializationService implements CommandLineRunner {
                         ${BUSINESS_LOGO}
                         <h1>${BUSINESS_NAME}</h1>
                         <p>${BUSINESS_ADDRESS}</p>
+                        ${COMMERCE_REGISTER}
                     </div>
                     <div class="info">
                         <span>Reçu #${SALE_ID}</span>
@@ -183,7 +185,7 @@ public class ReceiptTemplateInitializationService implements CommandLineRunner {
                         <tbody>${ITEMS}</tbody>
                     </table>
                     <div class="totals">
-                        <div>Sous-total: ${SUBTOTAL}</div>
+                        <div>${SUBTOTAL_LABEL} ${SUBTOTAL}</div>
                         <div>${TAX_LABEL} ${TAX}</div>
                         <div class="total">Total: ${TOTAL}</div>
                     </div>
@@ -210,6 +212,7 @@ public class ReceiptTemplateInitializationService implements CommandLineRunner {
                     <div class="header-minimal">
                         ${BUSINESS_LOGO}
                         <h3>${BUSINESS_NAME}</h3>
+                        ${COMMERCE_REGISTER}
                     </div>
                     <p>${SALE_DATE} | #${SALE_ID}</p>
                     <table>
@@ -224,7 +227,7 @@ public class ReceiptTemplateInitializationService implements CommandLineRunner {
                         <tbody>${ITEMS}</tbody>
                     </table>
                     <div class="summary-minimal">
-                        <div>Sous-total: ${SUBTOTAL}</div>
+                        <div>${SUBTOTAL_LABEL} ${SUBTOTAL}</div>
                         <div>${TAX_LABEL} ${TAX}</div>
                         <div class="total">Total: ${TOTAL}</div>
                     </div>
@@ -253,6 +256,7 @@ public class ReceiptTemplateInitializationService implements CommandLineRunner {
                         <h2>${BUSINESS_NAME}</h2>
                         <p>${BUSINESS_ADDRESS}</p>
                         <p>${BUSINESS_PHONE}</p>
+                        ${COMMERCE_REGISTER}
                     </div>
                     <div class="details">
                         <p>Reçu N° ${SALE_ID}</p>
@@ -270,7 +274,7 @@ public class ReceiptTemplateInitializationService implements CommandLineRunner {
                         <tbody>${ITEMS}</tbody>
                     </table>
                     <div class="summary">
-                        <p>Sous-total: ${SUBTOTAL}</p>
+                        <p>${SUBTOTAL_LABEL} ${SUBTOTAL}</p>
                         <p>${TAX_LABEL} ${TAX}</p>
                         <p class="grand-total">Total: ${TOTAL}</p>
                     </div>
@@ -295,6 +299,7 @@ public class ReceiptTemplateInitializationService implements CommandLineRunner {
                     <div class="header-color">
                         ${BUSINESS_LOGO}
                         <h2>${BUSINESS_NAME}</h2>
+                        ${COMMERCE_REGISTER}
                     </div>
                     <div class="info-color">
                         <p>Reçu #${SALE_ID}</p>
@@ -312,7 +317,7 @@ public class ReceiptTemplateInitializationService implements CommandLineRunner {
                         <tbody>${ITEMS}</tbody>
                     </table>
                     <div class="totals-color">
-                        <p>Sous-total: ${SUBTOTAL}</p>
+                        <p>${SUBTOTAL_LABEL} ${SUBTOTAL}</p>
                         <p>${TAX_LABEL} ${TAX}</p>
                         <p class="total-color">Total: ${TOTAL}</p>
                     </div>
@@ -339,6 +344,7 @@ public class ReceiptTemplateInitializationService implements CommandLineRunner {
                         <h2>${BUSINESS_NAME}</h2>
                         <p>${BUSINESS_ADDRESS}</p>
                         <p>${BUSINESS_PHONE} | ${BUSINESS_EMAIL}</p>
+                        ${COMMERCE_REGISTER}
                     </div>
                     <div class="receipt-info">
                         <p><strong>Reçu N°:</strong> ${SALE_ID}</p>
@@ -356,7 +362,7 @@ public class ReceiptTemplateInitializationService implements CommandLineRunner {
                         <tbody>${ITEMS}</tbody>
                     </table>
                     <div class="totals-professional">
-                        <div class="row"><span>Sous-total:</span><span>${SUBTOTAL}</span></div>
+                        <div class="row"><span>${SUBTOTAL_LABEL}</span><span>${SUBTOTAL}</span></div>
                         <div class="row"><span>${TAX_LABEL}</span><span>${TAX}</span></div>
                         <div class="row total-row"><span>Total:</span><span>${TOTAL}</span></div>
                     </div>

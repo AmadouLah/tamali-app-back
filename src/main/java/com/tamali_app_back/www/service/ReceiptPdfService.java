@@ -71,6 +71,7 @@ public class ReceiptPdfService {
             taxRateDisplay = String.format(" (%.0f%%)", taxConfig.getRate().doubleValue());
         }
         
+        String subtotalLabel = taxAmount.compareTo(BigDecimal.ZERO) > 0 ? "Sous-total HT:" : "Sous-total:";
         String taxLabel = "TVA" + taxRateDisplay + ":";
         String taxValue = formatMoney(taxAmount);
 
@@ -82,15 +83,21 @@ public class ReceiptPdfService {
                 taxAmount,
                 subtotal);
 
+        String commerceRegisterHtml = (business.getCommerceRegisterNumber() != null && !business.getCommerceRegisterNumber().isBlank())
+                ? "<p>Registre de commerce: " + business.getCommerceRegisterNumber().trim() + "</p>"
+                : "";
+
         Map<String, String> variables = new HashMap<>();
         variables.put("${BUSINESS_LOGO}", logoHtml);
         variables.put("${BUSINESS_NAME}", business.getName() != null ? business.getName() : "");
         variables.put("${BUSINESS_EMAIL}", business.getEmail() != null ? business.getEmail() : "");
         variables.put("${BUSINESS_PHONE}", business.getPhone() != null ? business.getPhone() : "");
         variables.put("${BUSINESS_ADDRESS}", business.getAddress() != null ? business.getAddress() : "");
+        variables.put("${COMMERCE_REGISTER}", commerceRegisterHtml);
         variables.put("${SALE_DATE}", sale.getSaleDate().format(DATE_FORMATTER));
         variables.put("${SALE_ID}", sale.getId().toString());
         variables.put("${ITEMS}", buildItemsHtml(sale));
+        variables.put("${SUBTOTAL_LABEL}", subtotalLabel);
         variables.put("${SUBTOTAL}", formatMoney(subtotal));
         variables.put("${TAX}", taxValue);
         variables.put("${TAX_LABEL}", taxLabel);

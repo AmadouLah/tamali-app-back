@@ -77,6 +77,7 @@ public class SaleService {
         boolean taxEnabled = taxConfig != null && taxConfig.isEnabled();
         BigDecimal taxRate = taxConfig != null && taxConfig.getRate() != null ? taxConfig.getRate().divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP) : BigDecimal.ZERO;
 
+        BigDecimal onePlusTaxRate = BigDecimal.ONE.add(taxRate);
         List<SaleItem> entityItems = new ArrayList<>();
         for (SaleItemRequest req : items) {
             Product product = productRepository.findById(req.productId()).orElse(null);
@@ -85,12 +86,15 @@ public class SaleService {
             if (stock == null || stock.getQuantity() < req.quantity()) return null;
 
             BigDecimal price = product.getUnitPrice();
-            BigDecimal itemTotal = price.multiply(BigDecimal.valueOf(req.quantity()));
+            BigDecimal itemLineTotal = price.multiply(BigDecimal.valueOf(req.quantity()));
             BigDecimal itemTax = BigDecimal.ZERO;
+            BigDecimal itemTotalTTC = itemLineTotal;
             if (taxEnabled && taxRate.compareTo(BigDecimal.ZERO) > 0 && product.isTaxable()) {
-                itemTax = itemTotal.multiply(taxRate).setScale(4, RoundingMode.HALF_UP);
+                // Produit taxable : prix stocké = TTC, on extrait HT et TVA
+                BigDecimal itemHT = itemLineTotal.divide(onePlusTaxRate, 4, RoundingMode.HALF_UP);
+                itemTax = itemLineTotal.subtract(itemHT).setScale(4, RoundingMode.HALF_UP);
             }
-            totalAmount = totalAmount.add(itemTotal).add(itemTax);
+            totalAmount = totalAmount.add(itemTotalTTC);
             taxAmount = taxAmount.add(itemTax);
 
             SaleItem si = SaleItem.builder()
