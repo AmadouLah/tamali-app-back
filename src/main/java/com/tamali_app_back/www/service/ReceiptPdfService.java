@@ -83,9 +83,13 @@ public class ReceiptPdfService {
                 taxAmount,
                 subtotal);
 
-        String commerceRegisterHtml = (business.getCommerceRegisterNumber() != null && !business.getCommerceRegisterNumber().isBlank())
-                ? "<p>Registre de commerce: " + business.getCommerceRegisterNumber().trim() + "</p>"
+        String regNum = business.getCommerceRegisterNumber() != null ? business.getCommerceRegisterNumber().trim() : "";
+        String commerceRegisterHtml = !regNum.isBlank()
+                ? "<p class=\"receipt-register\">Registre de commerce: " + escapeHtml(regNum) + "</p>"
                 : "";
+
+        log.debug("Génération reçu - Business: {}, Registre de commerce: '{}', HTML généré: {}", 
+                business.getName(), regNum, commerceRegisterHtml.isEmpty() ? "(vide)" : "(présent)");
 
         Map<String, String> variables = new HashMap<>();
         variables.put("${BUSINESS_LOGO}", logoHtml);
@@ -109,6 +113,16 @@ public class ReceiptPdfService {
 
         String fullHtml = "<!DOCTYPE html><html><head><style>" + css + "</style></head><body>" + html + "</body></html>";
         return sanitizeForXhtml(fullHtml);
+    }
+
+    private String escapeHtml(String text) {
+        if (text == null) return "";
+        return text
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;");
     }
 
     /** Rend le HTML compatible XHTML pour openhtmltopdf (balises vides auto-fermées). */

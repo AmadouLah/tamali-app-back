@@ -177,7 +177,7 @@ public class SaleService {
      */
     @Transactional
     public String generateAndUploadReceipt(UUID saleId) {
-        Sale sale = saleRepository.findById(saleId)
+        Sale sale = saleRepository.findByIdWithBusinessAndTemplate(saleId)
                 .orElseThrow(() -> new ResourceNotFoundException("Vente", saleId));
         Invoice invoice = invoiceRepository.findBySaleId(saleId)
                 .orElseThrow(() -> new ResourceNotFoundException("Facture pour cette vente", saleId));
