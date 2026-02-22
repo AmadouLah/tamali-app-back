@@ -8,5 +8,6 @@ public record SaleItemDto(
         UUID productId,
         String productName,
         int quantity,
-        BigDecimal price
+        BigDecimal price,
+        BigDecimal purchasePrice
 ) {}
