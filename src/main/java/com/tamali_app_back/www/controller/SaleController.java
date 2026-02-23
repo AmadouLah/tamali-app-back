@@ -52,6 +52,12 @@ public class SaleController {
         return ResponseEntity.ok(dto);
     }
 
+    @GetMapping("/sales/{id}/receipt-html")
+    public ResponseEntity<Map<String, String>> getReceiptHtml(@PathVariable UUID id) {
+        String html = saleService.getReceiptHtml(id);
+        return ResponseEntity.ok(Map.of("html", html));
+    }
+
     @PostMapping("/sales/{id}/generate-receipt")
     public ResponseEntity<Map<String, String>> generateReceipt(@PathVariable UUID id) {
         String receiptPdfUrl = saleService.generateAndUploadReceipt(id);

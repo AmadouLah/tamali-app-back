@@ -29,6 +29,21 @@ public class ReceiptPdfService {
     private final ReceiptTemplateService receiptTemplateService;
     private final TaxConfigurationRepository taxConfigurationRepository;
 
+    /**
+     * Retourne le même HTML que celui utilisé pour le PDF (pour affichage à l'écran identique au PDF).
+     */
+    public String getReceiptHtml(Sale sale) {
+        Business business = sale.getBusiness();
+        ReceiptTemplate template = business != null ? business.getReceiptTemplate() : null;
+        if (template == null) {
+            template = receiptTemplateService.getRepository().findByIsDefaultTrue().orElse(null);
+        }
+        if (template == null || business == null) {
+            throw new IllegalStateException("Aucun template de reçu disponible");
+        }
+        return buildReceiptHtml(template, sale, business);
+    }
+
     public byte[] generateReceiptPdf(Sale sale) {
         Business business = sale.getBusiness();
         ReceiptTemplate template = business.getReceiptTemplate();

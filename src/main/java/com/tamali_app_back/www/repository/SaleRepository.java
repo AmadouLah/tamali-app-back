@@ -19,6 +19,9 @@ public interface SaleRepository extends JpaRepository<Sale, UUID> {
     @Query("SELECT s FROM Sale s LEFT JOIN FETCH s.business b LEFT JOIN FETCH b.receiptTemplate WHERE s.id = :id")
     Optional<Sale> findByIdWithBusinessAndTemplate(@Param("id") UUID id);
 
+    @Query("SELECT DISTINCT s FROM Sale s LEFT JOIN FETCH s.business b LEFT JOIN FETCH b.receiptTemplate LEFT JOIN FETCH s.items i LEFT JOIN FETCH i.product WHERE s.id = :id")
+    Optional<Sale> findByIdWithBusinessTemplateAndItems(@Param("id") UUID id);
+
     @Query("SELECT COALESCE(SUM(s.totalAmount), 0) FROM Sale s")
     BigDecimal sumTotalAmount();
 

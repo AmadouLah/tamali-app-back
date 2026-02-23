@@ -173,6 +173,16 @@ public class SaleService {
     }
 
     /**
+     * Retourne le HTML du reçu (même rendu que le PDF) pour affichage à l'écran.
+     */
+    @Transactional(readOnly = true)
+    public String getReceiptHtml(UUID saleId) {
+        Sale sale = saleRepository.findByIdWithBusinessTemplateAndItems(saleId)
+                .orElseThrow(() -> new ResourceNotFoundException("Vente", saleId));
+        return receiptPdfService.getReceiptHtml(sale);
+    }
+
+    /**
      * Génère le PDF du reçu avec le template choisi par le propriétaire, l'upload vers Supabase et retourne l'URL.
      */
     @Transactional
