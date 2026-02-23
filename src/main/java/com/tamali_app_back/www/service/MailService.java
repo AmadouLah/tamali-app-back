@@ -37,4 +37,12 @@ public interface MailService {
      * @param isOwner true pour un propriétaire d'entreprise, false pour un associé
      */
     void sendTemporaryPassword(String toEmail, String temporaryPassword, String loginUrl, boolean isOwner);
+
+    /**
+     * Envoie un email de communication à un destinataire (utilisé pour le broadcast à tous les utilisateurs).
+     * @param toEmail destinataire
+     * @param subject sujet de l'email
+     * @param htmlBody corps HTML du message
+     */
+    void sendBroadcastEmail(String toEmail, String subject, String htmlBody);
 }

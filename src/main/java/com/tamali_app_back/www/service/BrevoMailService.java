@@ -127,4 +127,26 @@ public class BrevoMailService implements MailService {
             throw new RuntimeException("Impossible d'envoyer l'email avec le mot de passe temporaire.", e);
         }
     }
+
+    @Override
+    public void sendBroadcastEmail(String toEmail, String subject, String htmlBody) {
+        Map<String, Object> body = Map.of(
+                "sender", Map.of("email", fromEmail, "name", fromName),
+                "to", List.of(Map.of("email", toEmail)),
+                "subject", subject != null && !subject.isBlank() ? subject : "Communication Tamali",
+                "htmlContent", htmlBody != null && !htmlBody.isBlank() ? htmlBody : "<p>Aucun contenu.</p>"
+        );
+        try {
+            restClient.post()
+                    .uri(BREVO_URL)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(body)
+                    .retrieve()
+                    .toBodilessEntity();
+            log.debug("Broadcast envoyé à {}", toEmail);
+        } catch (Exception e) {
+            log.error("Échec envoi broadcast Brevo vers {}: {}", toEmail, e.getMessage());
+            throw new RuntimeException("Impossible d'envoyer l'email de communication.", e);
+        }
+    }
 }

@@ -25,4 +25,7 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     @Query("SELECT u.business.id, COUNT(u) FROM User u WHERE u.business.id IS NOT NULL GROUP BY u.business.id")
     List<Object[]> countUsersGroupByBusinessId();
+
+    @Query("SELECT u.email FROM User u WHERE u.enabled = true")
+    List<String> findAllEmailsByEnabledTrue();
 }
