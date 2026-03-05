@@ -70,7 +70,10 @@ public class EntityMapper {
         if (e == null) return null;
         return new StockMovementDto(e.getId(),
                 e.getProduct() != null ? e.getProduct().getId() : null,
-                e.getQuantity(), e.getType(), e.getMovementAt());
+                e.getProduct() != null && e.getProduct().getBusiness() != null ? e.getProduct().getBusiness().getId() : null,
+                e.getQuantity(),
+                e.getType(),
+                e.getMovementAt());
     }
 
     public SaleItemDto toDto(SaleItem e) {

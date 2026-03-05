@@ -38,6 +38,15 @@ public class StockMovementService {
                 .stream().map(mapper::toDto).toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<StockMovementDto> exportByBusinessId(UUID businessId, LocalDateTime from, LocalDateTime to) {
+        List<StockMovement> movements = stockMovementRepository.findByProductBusinessIdOrderByMovementAtAsc(businessId);
+        return movements.stream()
+                .filter(mov -> isWithinRange(mov.getMovementAt(), from, to))
+                .map(mapper::toDto)
+                .toList();
+    }
+
     @Transactional
     public StockMovementDto create(UUID productId, int quantity, MovementType type) {
         Product product = productRepository.findById(productId).orElse(null);
@@ -58,5 +67,12 @@ public class StockMovementService {
                 .movementAt(LocalDateTime.now())
                 .build();
         return mapper.toDto(stockMovementRepository.save(mov));
+    }
+
+    private boolean isWithinRange(LocalDateTime movementAt, LocalDateTime from, LocalDateTime to) {
+        if (movementAt == null) return false;
+        if (from != null && movementAt.isBefore(from)) return false;
+        if (to != null && movementAt.isAfter(to)) return false;
+        return true;
     }
 }

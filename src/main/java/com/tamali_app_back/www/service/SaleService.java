@@ -4,7 +4,6 @@ import com.tamali_app_back.www.dto.InvoiceDto;
 import com.tamali_app_back.www.dto.PaymentDto;
 import com.tamali_app_back.www.dto.SaleDto;
 import com.tamali_app_back.www.dto.request.SaleItemRequest;
-import lombok.extern.slf4j.Slf4j;
 import com.tamali_app_back.www.entity.*;
 import com.tamali_app_back.www.exception.BadRequestException;
 import com.tamali_app_back.www.exception.ResourceNotFoundException;
@@ -12,6 +11,7 @@ import com.tamali_app_back.www.enums.MovementType;
 import com.tamali_app_back.www.enums.PaymentMethod;
 import com.tamali_app_back.www.repository.*;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,6 +47,22 @@ public class SaleService {
     public List<SaleDto> findByBusinessId(UUID businessId, int page, int size) {
         return saleRepository.findByBusinessIdOrderBySaleDateDesc(businessId, PageRequest.of(page, size))
                 .stream().map(mapper::toDto).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<SaleDto> exportSales(UUID businessId, LocalDateTime from, LocalDateTime to) {
+        List<Sale> sales = saleRepository.findByBusinessIdOrderBySaleDateDesc(businessId, PageRequest.of(0, Integer.MAX_VALUE));
+        return sales.stream()
+                .filter(sale -> isWithinRange(sale.getSaleDate(), from, to))
+                .map(mapper::toDto)
+                .toList();
+    }
+
+    private boolean isWithinRange(LocalDateTime saleDate, LocalDateTime from, LocalDateTime to) {
+        if (saleDate == null) return false;
+        if (from != null && saleDate.isBefore(from)) return false;
+        if (to != null && saleDate.isAfter(to)) return false;
+        return true;
     }
 
     @Transactional(readOnly = true)

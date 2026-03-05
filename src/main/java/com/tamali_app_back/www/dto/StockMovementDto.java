@@ -8,7 +8,9 @@ import java.util.UUID;
 public record StockMovementDto(
         UUID id,
         UUID productId,
+        UUID businessId,
         int quantity,
         MovementType type,
         LocalDateTime movementAt
-) {}
+) {
+}
