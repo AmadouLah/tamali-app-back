@@ -68,9 +68,24 @@ public class EntityMapper {
 
     public StockMovementDto toDto(StockMovement e) {
         if (e == null) return null;
-        return new StockMovementDto(e.getId(),
-                e.getProduct() != null ? e.getProduct().getId() : null,
-                e.getProduct() != null && e.getProduct().getBusiness() != null ? e.getProduct().getBusiness().getId() : null,
+        UUID productId = e.getProduct() != null ? e.getProduct().getId() : null;
+        UUID businessId = e.getProduct() != null && e.getProduct().getBusiness() != null
+                ? e.getProduct().getBusiness().getId()
+                : null;
+        UUID userId = e.getActor() != null ? e.getActor().getId() : null;
+        String userName = null;
+        if (e.getActor() != null) {
+            String first = e.getActor().getFirstname() != null ? e.getActor().getFirstname() : "";
+            String last = e.getActor().getLastname() != null ? e.getActor().getLastname() : "";
+            String full = (first + " " + last).trim();
+            userName = !full.isEmpty() ? full : e.getActor().getEmail();
+        }
+        return new StockMovementDto(
+                e.getId(),
+                productId,
+                businessId,
+                userId,
+                userName,
                 e.getQuantity(),
                 e.getType(),
                 e.getMovementAt());

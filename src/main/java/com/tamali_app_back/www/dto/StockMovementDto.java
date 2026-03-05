@@ -9,6 +9,8 @@ public record StockMovementDto(
         UUID id,
         UUID productId,
         UUID businessId,
+        UUID userId,
+        String userDisplayName,
         int quantity,
         MovementType type,
         LocalDateTime movementAt

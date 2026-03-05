@@ -4,10 +4,12 @@ import com.tamali_app_back.www.dto.StockMovementDto;
 import com.tamali_app_back.www.entity.Product;
 import com.tamali_app_back.www.entity.Stock;
 import com.tamali_app_back.www.entity.StockMovement;
+import com.tamali_app_back.www.entity.User;
 import com.tamali_app_back.www.enums.MovementType;
 import com.tamali_app_back.www.repository.ProductRepository;
 import com.tamali_app_back.www.repository.StockMovementRepository;
 import com.tamali_app_back.www.repository.StockRepository;
+import com.tamali_app_back.www.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -25,6 +27,7 @@ public class StockMovementService {
     private final StockMovementRepository stockMovementRepository;
     private final ProductRepository productRepository;
     private final StockRepository stockRepository;
+    private final UserRepository userRepository;
     private final EntityMapper mapper;
 
     @Transactional(readOnly = true)
@@ -48,7 +51,7 @@ public class StockMovementService {
     }
 
     @Transactional
-    public StockMovementDto create(UUID productId, int quantity, MovementType type) {
+    public StockMovementDto create(UUID productId, int quantity, MovementType type, UUID userId) {
         Product product = productRepository.findById(productId).orElse(null);
         if (product == null) return null;
         Stock stock = stockRepository.findByProductIdForUpdate(productId).orElse(null);
@@ -60,10 +63,12 @@ public class StockMovementService {
             stock.setQuantity(stock.getQuantity() + quantity);
         }
         stockRepository.save(stock);
+        User actor = userId != null ? userRepository.findById(userId).orElse(null) : null;
         StockMovement mov = StockMovement.builder()
                 .product(product)
                 .quantity(type == MovementType.OUT || type == MovementType.SALE ? -quantity : quantity)
                 .type(type)
+                .actor(actor)
                 .movementAt(LocalDateTime.now())
                 .build();
         return mapper.toDto(stockMovementRepository.save(mov));

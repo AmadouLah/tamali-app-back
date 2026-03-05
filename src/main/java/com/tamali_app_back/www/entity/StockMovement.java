@@ -29,6 +29,10 @@ public class StockMovement extends SyncableEntity {
     @JoinColumn(name = "product_id", nullable = false)
     private Product product;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    private User actor;
+
     @Column(nullable = false)
     private int quantity;
 

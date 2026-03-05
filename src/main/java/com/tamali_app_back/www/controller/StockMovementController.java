@@ -39,7 +39,7 @@ public class StockMovementController {
     public ResponseEntity<StockMovementDto> create(
             @PathVariable UUID productId,
             @Valid @RequestBody StockMovementCreateRequest request) {
-        StockMovementDto dto = stockMovementService.create(productId, request.quantity(), request.type());
+        StockMovementDto dto = stockMovementService.create(productId, request.quantity(), request.type(), request.userId());
         if (dto == null)
             throw new BadRequestException("Produit ou stock introuvable, ou stock insuffisant pour une sortie.");
         return ResponseEntity.status(HttpStatus.CREATED).body(dto);
