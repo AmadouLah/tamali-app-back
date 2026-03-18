@@ -8,6 +8,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -33,8 +34,8 @@ public class StockMovement extends SyncableEntity {
     @JoinColumn(name = "user_id")
     private User actor;
 
-    @Column(nullable = false)
-    private int quantity;
+    @Column(nullable = false, precision = 19, scale = 4)
+    private BigDecimal quantity;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

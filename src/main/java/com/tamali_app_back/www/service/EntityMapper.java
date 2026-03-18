@@ -10,6 +10,9 @@ import java.math.BigDecimal;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import com.tamali_app_back.www.enums.ProductType;
+import com.tamali_app_back.www.enums.ProductUnit;
+
 @Component
 public class EntityMapper {
 
@@ -52,9 +55,16 @@ public class EntityMapper {
 
     public ProductDto toDto(Product e) {
         if (e == null) return null;
-        int qty = e.getStock() != null ? e.getStock().getQuantity() : 0;
+        BigDecimal qty = e.getStock() != null && e.getStock().getQuantity() != null
+                ? e.getStock().getQuantity()
+                : BigDecimal.ZERO;
         ProductCategory cat = e.getCategory();
+        ProductType type = e.getProductType() != null ? e.getProductType() : ProductType.UNIT;
+        ProductUnit unit = e.getUnit() != null ? e.getUnit() : ProductUnit.PIECE;
+        if (type == ProductType.UNIT) unit = ProductUnit.PIECE;
+        if (type == ProductType.WEIGHT && unit == ProductUnit.PIECE) unit = ProductUnit.KG;
         return new ProductDto(e.getId(), e.getName(), e.getReference(), e.getUnitPrice(), e.getPurchasePrice(),
+                type, unit,
                 e.getBusiness() != null ? e.getBusiness().getId() : null,
                 cat != null ? cat.getId() : null,
                 cat != null ? cat.getName() : null,

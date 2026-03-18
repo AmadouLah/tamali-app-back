@@ -101,10 +101,12 @@ public class SaleService {
             Product product = productRepository.findById(req.productId()).orElse(null);
             if (product == null) continue;
             Stock stock = stockRepository.findByProductId(product.getId()).orElse(null);
-            if (stock == null || stock.getQuantity() < req.quantity()) return null;
+            if (stock == null || stock.getQuantity() == null || req.quantity() == null) return null;
+            if (req.quantity().compareTo(BigDecimal.ZERO) <= 0) return null;
+            if (stock.getQuantity().compareTo(req.quantity()) < 0) return null;
 
             BigDecimal price = product.getUnitPrice();
-            BigDecimal itemLineTotal = price.multiply(BigDecimal.valueOf(req.quantity()));
+            BigDecimal itemLineTotal = price.multiply(req.quantity());
             BigDecimal itemTax = BigDecimal.ZERO;
             BigDecimal itemTotalTTC = itemLineTotal;
             if (product.isTaxable()) {
@@ -139,15 +141,16 @@ public class SaleService {
 
         for (SaleItem si : sale.getItems()) {
             Stock stock = stockRepository.findByProductIdForUpdate(si.getProduct().getId()).orElseThrow();
-            if (stock.getQuantity() < si.getQuantity()) {
+            BigDecimal current = stock.getQuantity() != null ? stock.getQuantity() : BigDecimal.ZERO;
+            if (current.compareTo(si.getQuantity()) < 0) {
                 throw new BadRequestException(
                         "Stock insuffisant pour le produit " + si.getProduct().getName());
             }
-            stock.setQuantity(stock.getQuantity() - si.getQuantity());
+            stock.setQuantity(current.subtract(si.getQuantity()));
             stockRepository.save(stock);
             StockMovement mov = StockMovement.builder()
                     .product(si.getProduct())
-                    .quantity(-si.getQuantity())
+                    .quantity(si.getQuantity().negate())
                     .type(MovementType.SALE)
                     .movementAt(LocalDateTime.now())
                     .build();

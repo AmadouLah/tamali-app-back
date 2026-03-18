@@ -185,12 +185,26 @@ public class ReceiptPdfService {
             String productName = item.getProduct() != null ? item.getProduct().getName() : "N/A";
             sb.append("<tr>")
                     .append("<td>").append(productName).append("</td>")
-                    .append("<td>").append(item.getQuantity()).append("</td>")
+                    .append("<td>").append(formatQuantity(item)).append("</td>")
                     .append("<td>").append(formatMoney(item.getPrice())).append("</td>")
-                    .append("<td>").append(formatMoney(item.getPrice().multiply(BigDecimal.valueOf(item.getQuantity())))).append("</td>")
+                    .append("<td>").append(formatMoney(item.getPrice().multiply(item.getQuantity()))).append("</td>")
                     .append("</tr>");
         }
         return sb.toString();
+    }
+
+    private String formatQuantity(SaleItem item) {
+        if (item == null || item.getQuantity() == null) return "0";
+        String unit = "";
+        if (item.getProduct() != null && item.getProduct().getUnit() != null) {
+            unit = switch (item.getProduct().getUnit()) {
+                case PIECE -> "pc";
+                case KG -> "kg";
+                case G -> "g";
+            };
+        }
+        String qty = item.getQuantity().stripTrailingZeros().toPlainString();
+        return unit.isBlank() ? qty : (qty + " " + unit);
     }
 
     private String formatMoney(BigDecimal amount) {

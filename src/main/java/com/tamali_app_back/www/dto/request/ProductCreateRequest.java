@@ -1,5 +1,7 @@
 package com.tamali_app_back.www.dto.request;
 
+import com.tamali_app_back.www.enums.ProductType;
+import com.tamali_app_back.www.enums.ProductUnit;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
@@ -12,6 +14,8 @@ public record ProductCreateRequest(
         UUID categoryId,
         @NotNull BigDecimal unitPrice,
         BigDecimal purchasePrice,
+        ProductType productType,
+        ProductUnit unit,
         boolean taxable,
-        int initialQuantity
+        @NotNull BigDecimal initialQuantity
 ) {}

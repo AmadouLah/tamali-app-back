@@ -15,6 +15,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -51,22 +52,26 @@ public class StockMovementService {
     }
 
     @Transactional
-    public StockMovementDto create(UUID productId, int quantity, MovementType type, UUID userId) {
+    public StockMovementDto create(UUID productId, BigDecimal quantity, MovementType type, UUID userId) {
         Product product = productRepository.findById(productId).orElse(null);
         if (product == null) return null;
         Stock stock = stockRepository.findByProductIdForUpdate(productId).orElse(null);
         if (stock == null) return null;
+        if (quantity == null) return null;
+        BigDecimal qty = quantity;
+        if (qty.compareTo(BigDecimal.ZERO) <= 0) return null;
         if (type == MovementType.OUT || type == MovementType.SALE) {
-            if (stock.getQuantity() < quantity) return null;
-            stock.setQuantity(stock.getQuantity() - quantity);
+            if (stock.getQuantity() == null || stock.getQuantity().compareTo(qty) < 0) return null;
+            stock.setQuantity(stock.getQuantity().subtract(qty));
         } else {
-            stock.setQuantity(stock.getQuantity() + quantity);
+            BigDecimal current = stock.getQuantity() != null ? stock.getQuantity() : BigDecimal.ZERO;
+            stock.setQuantity(current.add(qty));
         }
         stockRepository.save(stock);
         User actor = userId != null ? userRepository.findById(userId).orElse(null) : null;
         StockMovement mov = StockMovement.builder()
                 .product(product)
-                .quantity(type == MovementType.OUT || type == MovementType.SALE ? -quantity : quantity)
+                .quantity(type == MovementType.OUT || type == MovementType.SALE ? qty.negate() : qty)
                 .type(type)
                 .actor(actor)
                 .movementAt(LocalDateTime.now())

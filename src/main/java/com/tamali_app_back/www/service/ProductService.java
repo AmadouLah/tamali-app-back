@@ -4,6 +4,8 @@ import com.tamali_app_back.www.dto.ProductDto;
 import com.tamali_app_back.www.dto.StockMovementDto;
 import com.tamali_app_back.www.entity.*;
 import com.tamali_app_back.www.enums.MovementType;
+import com.tamali_app_back.www.enums.ProductType;
+import com.tamali_app_back.www.enums.ProductUnit;
 import com.tamali_app_back.www.repository.BusinessRepository;
 import com.tamali_app_back.www.repository.ProductCategoryRepository;
 import com.tamali_app_back.www.repository.ProductRepository;
@@ -41,7 +43,18 @@ public class ProductService {
     }
 
     @Transactional
-    public ProductDto create(UUID businessId, String name, String reference, UUID categoryId, BigDecimal unitPrice, BigDecimal purchasePrice, boolean taxable, int initialQuantity) {
+    public ProductDto create(
+            UUID businessId,
+            String name,
+            String reference,
+            UUID categoryId,
+            BigDecimal unitPrice,
+            BigDecimal purchasePrice,
+            ProductType productType,
+            ProductUnit unit,
+            boolean taxable,
+            BigDecimal initialQuantity
+    ) {
         Business business = businessRepository.findById(businessId).orElse(null);
         if (business == null) return null;
         ProductCategory category = null;
@@ -51,29 +64,50 @@ public class ProductService {
                 category = null;
             }
         }
+
+        ProductType normalizedType = productType != null ? productType : ProductType.UNIT;
+        ProductUnit normalizedUnit = unit != null ? unit : ProductUnit.PIECE;
+        if (normalizedType == ProductType.UNIT) normalizedUnit = ProductUnit.PIECE;
+        if (normalizedType == ProductType.WEIGHT && normalizedUnit == ProductUnit.PIECE) normalizedUnit = ProductUnit.KG;
+
+        BigDecimal initQty = initialQuantity != null ? initialQuantity : BigDecimal.ZERO;
+        if (initQty.compareTo(BigDecimal.ZERO) < 0) initQty = BigDecimal.ZERO;
+
         Product p = Product.builder()
                 .name(name)
                 .reference(reference)
                 .unitPrice(unitPrice != null ? unitPrice : BigDecimal.ZERO)
                 .purchasePrice(purchasePrice)
+                .productType(normalizedType)
+                .unit(normalizedUnit)
                 .business(business)
                 .category(category)
                 .taxable(taxable)
                 .build();
         p = productRepository.save(p);
-        Stock s = Stock.builder().product(p).quantity(Math.max(0, initialQuantity)).build();
+        Stock s = Stock.builder().product(p).quantity(initQty).build();
         s = stockRepository.saveAndFlush(s);
         p.setStock(s);
-        if (initialQuantity > 0) {
+        if (initQty.compareTo(BigDecimal.ZERO) > 0) {
             StockMovement m = StockMovement.builder()
-                    .product(p).quantity(initialQuantity).type(MovementType.IN).movementAt(LocalDateTime.now()).build();
+                    .product(p).quantity(initQty).type(MovementType.IN).movementAt(LocalDateTime.now()).build();
             stockMovementRepository.save(m);
         }
         return mapper.toDto(p);
     }
 
     @Transactional
-    public ProductDto update(UUID id, String name, String reference, UUID categoryId, BigDecimal unitPrice, BigDecimal purchasePrice, Boolean taxable) {
+    public ProductDto update(
+            UUID id,
+            String name,
+            String reference,
+            UUID categoryId,
+            BigDecimal unitPrice,
+            BigDecimal purchasePrice,
+            ProductType productType,
+            ProductUnit unit,
+            Boolean taxable
+    ) {
         Product p = productRepository.findById(id).orElse(null);
         if (p == null) return null;
         if (name != null) p.setName(name);
@@ -86,6 +120,20 @@ public class ProductService {
         }
         if (unitPrice != null) p.setUnitPrice(unitPrice);
         if (purchasePrice != null) p.setPurchasePrice(purchasePrice);
+        if (productType != null) {
+            p.setProductType(productType);
+            if (productType == ProductType.UNIT) {
+                p.setUnit(ProductUnit.PIECE);
+            }
+        }
+        if (unit != null) {
+            ProductType currentType = p.getProductType() != null ? p.getProductType() : ProductType.UNIT;
+            if (currentType == ProductType.UNIT) {
+                p.setUnit(ProductUnit.PIECE);
+            } else {
+                p.setUnit(unit == ProductUnit.PIECE ? ProductUnit.KG : unit);
+            }
+        }
         if (taxable != null) p.setTaxable(taxable);
         return mapper.toDto(productRepository.save(p));
     }

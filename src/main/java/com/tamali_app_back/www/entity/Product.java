@@ -7,6 +7,9 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
+import com.tamali_app_back.www.enums.ProductType;
+import com.tamali_app_back.www.enums.ProductUnit;
+
 import java.math.BigDecimal;
 import java.util.UUID;
 
@@ -35,6 +38,16 @@ public class Product extends SyncableEntity {
     @Column(precision = 19, scale = 4)
     private BigDecimal purchasePrice;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "product_type")
+    @Builder.Default
+    private ProductType productType = ProductType.UNIT;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "unit")
+    @Builder.Default
+    private ProductUnit unit = ProductUnit.PIECE;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "business_id", nullable = false)
     private Business business;
@@ -47,4 +60,16 @@ public class Product extends SyncableEntity {
     private Stock stock;
 
     private boolean taxable;
+
+    @PrePersist
+    @PreUpdate
+    private void normalizeDefaults() {
+        if (productType == null) productType = ProductType.UNIT;
+        if (unit == null) unit = ProductUnit.PIECE;
+        if (productType == ProductType.UNIT) {
+            unit = ProductUnit.PIECE;
+        } else if (productType == ProductType.WEIGHT && unit == ProductUnit.PIECE) {
+            unit = ProductUnit.KG;
+        }
+    }
 }

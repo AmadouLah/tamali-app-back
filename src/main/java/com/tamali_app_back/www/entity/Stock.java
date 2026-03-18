@@ -7,6 +7,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 @Entity
@@ -27,6 +28,6 @@ public class Stock extends SyncableEntity {
     @JoinColumn(name = "product_id", unique = true, nullable = false)
     private Product product;
 
-    @Column(nullable = false)
-    private int quantity;
+    @Column(nullable = false, precision = 19, scale = 4)
+    private BigDecimal quantity;
 }

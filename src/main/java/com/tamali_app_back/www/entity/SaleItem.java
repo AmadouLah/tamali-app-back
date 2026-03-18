@@ -32,8 +32,8 @@ public class SaleItem extends SyncableEntity {
     @JoinColumn(name = "product_id", nullable = false)
     private Product product;
 
-    @Column(nullable = false)
-    private int quantity;
+    @Column(nullable = false, precision = 19, scale = 4)
+    private BigDecimal quantity;
 
     @Column(nullable = false, precision = 19, scale = 4)
     private BigDecimal price;
