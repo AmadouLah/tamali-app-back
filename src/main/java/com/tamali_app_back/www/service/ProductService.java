@@ -131,12 +131,9 @@ public class ProductService {
     }
 
     private ProductUnit normalizeUnit(ProductType type, ProductUnit requestedUnit) {
-        ProductType safeType = type != null ? type : ProductType.UNIT;
         ProductUnit unit = requestedUnit != null ? requestedUnit : ProductUnit.PIECE;
-        if (safeType == ProductType.WEIGHT) {
-            return (unit == ProductUnit.KG || unit == ProductUnit.G) ? unit : ProductUnit.KG;
-        }
-        return (unit == ProductUnit.KG || unit == ProductUnit.G) ? ProductUnit.PIECE : unit;
+        if (unit == ProductUnit.KG || unit == ProductUnit.G) return unit;
+        return unit;
     }
 
     @Transactional(readOnly = true)
