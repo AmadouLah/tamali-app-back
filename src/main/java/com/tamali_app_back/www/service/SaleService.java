@@ -39,6 +39,7 @@ public class SaleService {
     private final InvoiceService invoiceService;
     private final PaymentService paymentService;
     private final TaxConfigurationRepository taxConfigurationRepository;
+    private final CustomerRepository customerRepository;
     private final EntityMapper mapper;
     private final ReceiptPdfService receiptPdfService;
     private final SupabaseStorageService supabaseStorage;
@@ -82,10 +83,11 @@ public class SaleService {
 
     @Transactional
     public SaleDto createSale(UUID businessId, UUID cashierId, List<SaleItemRequest> items, PaymentMethod method,
-                             String customerEmail, String customerPhone) {
+                             String customerName, String customerEmail, String customerPhone) {
         Business business = businessRepository.findById(businessId).orElse(null);
         User cashier = userRepository.findById(cashierId).orElse(null);
         if (business == null || cashier == null || items == null || items.isEmpty()) return null;
+        Customer customer = resolveCustomer(business, customerName, customerPhone);
 
         BigDecimal totalAmount = BigDecimal.ZERO;
         BigDecimal taxAmount = BigDecimal.ZERO;
@@ -128,6 +130,7 @@ public class SaleService {
         Sale sale = Sale.builder()
                 .business(business)
                 .cashier(cashier)
+                .customer(customer)
                 .items(entityItems)
                 .totalAmount(totalAmount)
                 .taxAmount(taxAmount)
@@ -179,6 +182,26 @@ public class SaleService {
         uploadReceiptToSupabase(sale, invoice);
 
         return mapper.toDto(sale);
+    }
+
+    private Customer resolveCustomer(Business business, String customerName, String customerPhone) {
+        String normalizedName = customerName != null ? customerName.trim() : "";
+        if (normalizedName.isBlank()) return null;
+
+        Customer customer = customerRepository
+                .findFirstByBusinessIdAndNameIgnoreCase(business.getId(), normalizedName)
+                .orElseGet(() -> customerRepository.save(Customer.builder()
+                        .business(business)
+                        .name(normalizedName)
+                        .phone(customerPhone != null ? customerPhone.trim() : null)
+                        .build()));
+
+        String normalizedPhone = customerPhone != null ? customerPhone.trim() : null;
+        if (normalizedPhone != null && !normalizedPhone.isBlank() && !normalizedPhone.equals(customer.getPhone())) {
+            customer.setPhone(normalizedPhone);
+            return customerRepository.save(customer);
+        }
+        return customer;
     }
 
     @Transactional

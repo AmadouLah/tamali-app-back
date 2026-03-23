@@ -16,6 +16,8 @@ public interface SaleRepository extends JpaRepository<Sale, UUID> {
 
     List<Sale> findByBusinessIdOrderBySaleDateDesc(UUID businessId, Pageable pageable);
 
+    List<Sale> findByBusinessIdAndCustomerIdOrderBySaleDateDesc(UUID businessId, UUID customerId);
+
     @Query("""
             SELECT s FROM Sale s
             JOIN FETCH s.business b

@@ -35,6 +35,10 @@ public class Sale extends SyncableEntity {
     @JoinColumn(name = "cashier_id", nullable = false)
     private User cashier;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "customer_id")
+    private Customer customer;
+
     @OneToMany(mappedBy = "sale", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<SaleItem> items = new ArrayList<>();

@@ -13,6 +13,7 @@ public record SaleCreateRequest(
         @NotNull UUID cashierId,
         @NotEmpty @Valid List<SaleItemRequest> items,
         PaymentMethod method,
+        String customerName,
         String customerEmail,
         String customerPhone
 ) {}

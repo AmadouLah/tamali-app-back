@@ -149,7 +149,20 @@ public class EntityMapper {
         return new SaleDto(e.getId(),
                 e.getBusiness() != null ? e.getBusiness().getId() : null,
                 e.getCashier() != null ? e.getCashier().getId() : null,
+                e.getCustomer() != null ? e.getCustomer().getId() : null,
+                e.getCustomer() != null ? e.getCustomer().getName() : null,
+                e.getCustomer() != null ? e.getCustomer().getPhone() : null,
                 items, e.getTotalAmount(), e.getTaxAmount(), e.getSaleDate());
+    }
+
+    public CustomerDto toDto(Customer e) {
+        if (e == null) return null;
+        return new CustomerDto(
+                e.getId(),
+                e.getBusiness() != null ? e.getBusiness().getId() : null,
+                e.getName(),
+                e.getPhone()
+        );
     }
 
     public InvoiceDto toDto(Invoice e) {

@@ -70,7 +70,7 @@ public class SaleController {
             @Valid @RequestBody SaleCreateRequest request) {
         SaleDto dto = saleService.createSale(
                 businessId, request.cashierId(), request.items(), request.method(),
-                request.customerEmail(), request.customerPhone());
+                request.customerName(), request.customerEmail(), request.customerPhone());
         if (dto == null)
             throw new BadRequestException("Données invalides : business ou caissier introuvable, ou stock insuffisant.");
         return ResponseEntity.status(HttpStatus.CREATED).body(dto);

@@ -66,6 +66,10 @@ public class Business extends SyncableEntity {
     @Builder.Default
     private List<Sale> sales = new ArrayList<>();
 
+    @OneToMany(mappedBy = "business", cascade = CascadeType.ALL)
+    @Builder.Default
+    private List<Customer> customers = new ArrayList<>();
+
     @OneToOne(mappedBy = "business", cascade = CascadeType.ALL, orphanRemoval = true)
     private TaxConfiguration taxConfiguration;
 
