@@ -31,6 +31,8 @@ public class ProductDefaultsBackfillService implements CommandLineRunner {
         // Important: ne jamais faire échouer le démarrage. On ne met à jour que si la colonne existe.
         try {
             transactionTemplate.executeWithoutResult(status -> {
+                ensureProductsUnitConstraint();
+
                 int updatedType = runIfColumnExists("products", "product_type",
                         "UPDATE products SET product_type = 'UNIT' WHERE product_type IS NULL");
                 int updatedUnit = runIfColumnExists("products", "unit",
@@ -52,6 +54,46 @@ public class ProductDefaultsBackfillService implements CommandLineRunner {
             });
         } catch (Exception e) {
             log.warn("Backfill produits/quantités ignoré (non bloquant): {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Garantit que la contrainte CHECK de products.unit autorise les nouvelles unités.
+     * Beaucoup de bases existantes gardent encore l'ancienne contrainte (PIECE/KG/G).
+     */
+    private void ensureProductsUnitConstraint() {
+        if (!columnExists("products", "unit")) return;
+        try {
+            // Supprimer toutes les contraintes CHECK sur products qui référencent la colonne unit.
+            entityManager.createNativeQuery(
+                    "DO $$ " +
+                            "DECLARE r RECORD; " +
+                            "BEGIN " +
+                            "  FOR r IN " +
+                            "    SELECT c.conname " +
+                            "    FROM pg_constraint c " +
+                            "    JOIN pg_class t ON t.oid = c.conrelid " +
+                            "    JOIN pg_namespace n ON n.oid = t.relnamespace " +
+                            "    WHERE c.contype = 'c' " +
+                            "      AND t.relname = 'products' " +
+                            "      AND n.nspname = current_schema() " +
+                            "      AND pg_get_constraintdef(c.oid) ILIKE '%unit%' " +
+                            "  LOOP " +
+                            "    EXECUTE format('ALTER TABLE %I.%I DROP CONSTRAINT IF EXISTS %I', current_schema(), 'products', r.conname); " +
+                            "  END LOOP; " +
+                            "END $$;")
+                    .executeUpdate();
+
+            // Recréer une contrainte unique, à jour.
+            entityManager.createNativeQuery(
+                            "ALTER TABLE products " +
+                                    "ADD CONSTRAINT products_unit_check " +
+                                    "CHECK (unit IN ('PIECE','KG','G','LITRE','SAC','METRE'))")
+                    .executeUpdate();
+            log.info("Contrainte products.unit mise à jour avec LITRE/SAC/METRE.");
+        } catch (Exception e) {
+            // Non bloquant : la base peut déjà être conforme
+            log.debug("Contrainte products.unit déjà conforme ou non modifiable: {}", e.getMessage());
         }
     }
 
