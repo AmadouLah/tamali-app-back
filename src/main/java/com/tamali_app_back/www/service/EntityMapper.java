@@ -61,8 +61,11 @@ public class EntityMapper {
         ProductCategory cat = e.getCategory();
         ProductType type = e.getProductType() != null ? e.getProductType() : ProductType.UNIT;
         ProductUnit unit = e.getUnit() != null ? e.getUnit() : ProductUnit.PIECE;
-        if (type == ProductType.UNIT) unit = ProductUnit.PIECE;
-        if (type == ProductType.WEIGHT && unit == ProductUnit.PIECE) unit = ProductUnit.KG;
+        if (type == ProductType.WEIGHT) {
+            if (unit != ProductUnit.KG && unit != ProductUnit.G) unit = ProductUnit.KG;
+        } else {
+            if (unit == ProductUnit.KG || unit == ProductUnit.G) unit = ProductUnit.PIECE;
+        }
         return new ProductDto(e.getId(), e.getName(), e.getReference(), e.getUnitPrice(), e.getPurchasePrice(),
                 type, unit,
                 e.getBusiness() != null ? e.getBusiness().getId() : null,

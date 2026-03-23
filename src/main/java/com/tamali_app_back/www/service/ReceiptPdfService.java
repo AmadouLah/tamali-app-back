@@ -201,6 +201,9 @@ public class ReceiptPdfService {
                 case PIECE -> "pc";
                 case KG -> "kg";
                 case G -> "g";
+                case LITRE -> "L";
+                case SAC -> "sac";
+                case METRE -> "m";
             };
         }
         String qty = item.getQuantity().stripTrailingZeros().toPlainString();

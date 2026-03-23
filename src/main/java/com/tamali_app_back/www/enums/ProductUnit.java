@@ -4,6 +4,9 @@ package com.tamali_app_back.www.enums;
 public enum ProductUnit {
     PIECE,
     KG,
-    G
+    G,
+    LITRE,
+    SAC,
+    METRE
 }
 

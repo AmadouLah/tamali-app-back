@@ -66,10 +66,10 @@ public class Product extends SyncableEntity {
     private void normalizeDefaults() {
         if (productType == null) productType = ProductType.UNIT;
         if (unit == null) unit = ProductUnit.PIECE;
-        if (productType == ProductType.UNIT) {
-            unit = ProductUnit.PIECE;
-        } else if (productType == ProductType.WEIGHT && unit == ProductUnit.PIECE) {
-            unit = ProductUnit.KG;
+        if (productType == ProductType.WEIGHT) {
+            if (unit != ProductUnit.KG && unit != ProductUnit.G) unit = ProductUnit.KG;
+        } else {
+            if (unit == ProductUnit.KG || unit == ProductUnit.G) unit = ProductUnit.PIECE;
         }
     }
 }

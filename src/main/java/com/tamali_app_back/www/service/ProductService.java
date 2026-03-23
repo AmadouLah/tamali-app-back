@@ -66,9 +66,7 @@ public class ProductService {
         }
 
         ProductType normalizedType = productType != null ? productType : ProductType.UNIT;
-        ProductUnit normalizedUnit = unit != null ? unit : ProductUnit.PIECE;
-        if (normalizedType == ProductType.UNIT) normalizedUnit = ProductUnit.PIECE;
-        if (normalizedType == ProductType.WEIGHT && normalizedUnit == ProductUnit.PIECE) normalizedUnit = ProductUnit.KG;
+        ProductUnit normalizedUnit = normalizeUnit(normalizedType, unit);
 
         BigDecimal initQty = initialQuantity != null ? initialQuantity : BigDecimal.ZERO;
         if (initQty.compareTo(BigDecimal.ZERO) < 0) initQty = BigDecimal.ZERO;
@@ -122,20 +120,23 @@ public class ProductService {
         if (purchasePrice != null) p.setPurchasePrice(purchasePrice);
         if (productType != null) {
             p.setProductType(productType);
-            if (productType == ProductType.UNIT) {
-                p.setUnit(ProductUnit.PIECE);
-            }
+            p.setUnit(normalizeUnit(productType, p.getUnit()));
         }
         if (unit != null) {
             ProductType currentType = p.getProductType() != null ? p.getProductType() : ProductType.UNIT;
-            if (currentType == ProductType.UNIT) {
-                p.setUnit(ProductUnit.PIECE);
-            } else {
-                p.setUnit(unit == ProductUnit.PIECE ? ProductUnit.KG : unit);
-            }
+            p.setUnit(normalizeUnit(currentType, unit));
         }
         if (taxable != null) p.setTaxable(taxable);
         return mapper.toDto(productRepository.save(p));
+    }
+
+    private ProductUnit normalizeUnit(ProductType type, ProductUnit requestedUnit) {
+        ProductType safeType = type != null ? type : ProductType.UNIT;
+        ProductUnit unit = requestedUnit != null ? requestedUnit : ProductUnit.PIECE;
+        if (safeType == ProductType.WEIGHT) {
+            return (unit == ProductUnit.KG || unit == ProductUnit.G) ? unit : ProductUnit.KG;
+        }
+        return (unit == ProductUnit.KG || unit == ProductUnit.G) ? ProductUnit.PIECE : unit;
     }
 
     @Transactional(readOnly = true)
