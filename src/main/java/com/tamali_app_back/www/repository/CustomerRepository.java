@@ -11,6 +11,8 @@ public interface CustomerRepository extends JpaRepository<Customer, UUID> {
 
     List<Customer> findByBusinessIdOrderByNameAsc(UUID businessId);
 
+    Optional<Customer> findByIdAndBusinessId(UUID id, UUID businessId);
+
     Optional<Customer> findFirstByBusinessIdAndNameIgnoreCase(UUID businessId, String name);
 
     List<Customer> findByBusinessIdAndNameContainingIgnoreCaseOrderByNameAsc(UUID businessId, String q);
