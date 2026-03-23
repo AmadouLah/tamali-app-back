@@ -14,9 +14,11 @@ import org.springframework.web.client.RestClient;
 
 import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
+import java.text.NumberFormat;
 import java.time.format.DateTimeFormatter;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 @Service
@@ -83,7 +85,11 @@ public class ReceiptPdfService {
         String taxRateDisplay = "";
         if (taxAmount.compareTo(BigDecimal.ZERO) > 0) {
             boolean fromConfig = taxConfig != null && taxConfig.isEnabled() && taxConfig.getRate() != null && taxConfig.getRate().compareTo(BigDecimal.ZERO) > 0;
-            taxRateDisplay = fromConfig ? String.format(" (%.0f%%)", taxConfig.getRate().doubleValue()) : " (18%)";
+            BigDecimal configuredRate = null;
+            if (fromConfig && taxConfig != null) {
+                configuredRate = taxConfig.getRate();
+            }
+            taxRateDisplay = configuredRate != null ? String.format(" (%.0f%%)", configuredRate.doubleValue()) : " (18%)";
         }
         
         String subtotalLabel = taxAmount.compareTo(BigDecimal.ZERO) > 0 ? "Sous-total HT:" : "Sous-total:";
@@ -212,6 +218,14 @@ public class ReceiptPdfService {
 
     private String formatMoney(BigDecimal amount) {
         if (amount == null) return "0,00 FCFA";
-        return String.format("%.2f FCFA", amount.doubleValue()).replace(".", ",");
+        NumberFormat formatter = NumberFormat.getNumberInstance(Locale.FRANCE);
+        formatter.setMinimumFractionDigits(2);
+        formatter.setMaximumFractionDigits(2);
+        formatter.setGroupingUsed(true);
+        // Remplace les espaces insécables par des espaces standards pour une lecture uniforme.
+        String formatted = formatter.format(amount)
+                .replace('\u00A0', ' ')
+                .replace('\u202F', ' ');
+        return formatted + " FCFA";
     }
 }
