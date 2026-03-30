@@ -41,5 +41,5 @@ ENV JAVA_OPTS="-Xms96m -Xmx380m \
     -Djava.awt.headless=true \
     -Djava.security.egd=file:/dev/./urandom"
 
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -Dserver.address=0.0.0.0 -jar app.jar"]
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -Dserver.address=0.0.0.0 -Dspring.profiles.active=${SPRING_PROFILES_ACTIVE:-render} -jar app.jar"]
 
