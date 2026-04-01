@@ -66,6 +66,8 @@ public class CorsConfig {
                 "Access-Control-Request-Method",
                 "Access-Control-Request-Headers",
                 "X-Auth-Token",
+                "X-User-Id",
+                "X-User-Role",
                 "Cache-Control",
                 "Pragma",
                 "If-Modified-Since",

@@ -60,7 +60,7 @@ public class CustomCorsFilter extends OncePerRequestFilter {
             response.setHeader("Access-Control-Allow-Headers", 
                 "Authorization, Content-Type, X-Requested-With, Accept, Origin, " +
                 "Access-Control-Request-Method, Access-Control-Request-Headers, " +
-                "X-Auth-Token, Cache-Control, Pragma, If-Modified-Since, If-None-Match, " +
+                "X-Auth-Token, X-User-Id, X-User-Role, Cache-Control, Pragma, If-Modified-Since, If-None-Match, " +
                 "X-Forwarded-For, X-Forwarded-Proto, X-Forwarded-Host, " +
                 "sec-ch-ua, sec-ch-ua-mobile, sec-ch-ua-platform, " +
                 "sec-fetch-dest, sec-fetch-mode, sec-fetch-site, sec-fetch-user");
@@ -89,7 +89,7 @@ public class CustomCorsFilter extends OncePerRequestFilter {
             response.setHeader("Access-Control-Allow-Headers", 
                 "Authorization, Content-Type, X-Requested-With, Accept, Origin, " +
                 "Access-Control-Request-Method, Access-Control-Request-Headers, " +
-                "X-Auth-Token, Cache-Control, Pragma, If-Modified-Since, If-None-Match, " +
+                "X-Auth-Token, X-User-Id, X-User-Role, Cache-Control, Pragma, If-Modified-Since, If-None-Match, " +
                 "X-Forwarded-For, X-Forwarded-Proto, X-Forwarded-Host, " +
                 "sec-ch-ua, sec-ch-ua-mobile, sec-ch-ua-platform, " +
                 "sec-fetch-dest, sec-fetch-mode, sec-fetch-site, sec-fetch-user");
