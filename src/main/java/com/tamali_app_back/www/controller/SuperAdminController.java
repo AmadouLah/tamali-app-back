@@ -5,8 +5,12 @@ import com.tamali_app_back.www.dto.BusinessSummaryDto;
 import com.tamali_app_back.www.dto.SuperAdminDashboardDto;
 import com.tamali_app_back.www.dto.request.AnnouncementRequest;
 import com.tamali_app_back.www.dto.request.BroadcastEmailRequest;
+import com.tamali_app_back.www.dto.request.SuperAdminResetPasswordRequest;
+import com.tamali_app_back.www.enums.RoleType;
 import com.tamali_app_back.www.service.AnnouncementService;
 import com.tamali_app_back.www.service.SuperAdminService;
+import com.tamali_app_back.www.service.UserService;
+import com.tamali_app_back.www.exception.BadRequestException;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -21,6 +25,7 @@ public class SuperAdminController {
 
     private final SuperAdminService superAdminService;
     private final AnnouncementService announcementService;
+    private final UserService userService;
 
     @GetMapping("/dashboard")
     public ResponseEntity<SuperAdminDashboardDto> getDashboard() {
@@ -52,5 +57,27 @@ public class SuperAdminController {
     public ResponseEntity<Void> broadcastEmail(@Valid @RequestBody BroadcastEmailRequest request) {
         announcementService.broadcastEmail(request.subject(), request.message());
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Réinitialise le mot de passe d'un utilisateur existant et envoie un mot de passe temporaire par email.
+     * Ne supprime jamais les données de l'utilisateur : seule la valeur du mot de passe est remplacée.
+     *
+     * Sécurité: réservé au SUPER_ADMIN via header X-User-Role.
+     */
+    @PostMapping("/users/reset-password")
+    public ResponseEntity<Void> resetUserPassword(
+            @RequestHeader(value = "X-User-Role", required = false) String userRole,
+            @Valid @RequestBody SuperAdminResetPasswordRequest request
+    ) {
+        requireSuperAdmin(userRole);
+        userService.resetPasswordAsSuperAdmin(request.email());
+        return ResponseEntity.noContent().build();
+    }
+
+    private static void requireSuperAdmin(String userRole) {
+        if (!RoleType.SUPER_ADMIN.name().equals(userRole)) {
+            throw new BadRequestException("Seul le SUPER_ADMIN peut effectuer cette action.");
+        }
     }
 }

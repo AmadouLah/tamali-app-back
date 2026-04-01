@@ -34,7 +34,7 @@ public final class ServiceRequestEmailTemplate {
                     <div style="background:#f8fafc; border-left:4px solid #0f172a; padding:16px 20px; margin:24px 0; border-radius:4px;">
                       <p style="margin:0 0 12px; font-size:14px; font-weight:600; color:#0f172a;">Email du demandeur :</p>
                       <p style="margin:0 0 20px; font-size:15px; color:#475569;">EMAIL_PLACEHOLDER</p>
-                      <p style="margin:0 0 12px; font-size:14px; font-weight:600; color:#0f172a;">Objectif :</p>
+                      <p style="margin:0 0 12px; font-size:14px; font-weight:600; color:#0f172a;">Motif de la demande :</p>
                       <p style="margin:0; font-size:15px; color:#475569; line-height:1.6;">OBJECTIVE_PLACEHOLDER</p>
                     </div>
                     <p style="margin:24px 0 0; font-size:13px; color:#94a3b8;">

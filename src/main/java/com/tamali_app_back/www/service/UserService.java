@@ -1110,6 +1110,49 @@ public class UserService {
     }
 
     /**
+     * Réinitialise le mot de passe d'un utilisateur existant (flux "oubli").
+     * Ne modifie aucune autre donnée métier: seulement le champ password et le flag mustChangePassword.
+     * Un mot de passe temporaire est envoyé par email pour permettre la reconnexion, puis l'utilisateur
+     * doit le changer via la page de changement de mot de passe.
+     *
+     * Usage: réservé au SUPER_ADMIN (vérifié au niveau Controller).
+     */
+    @Transactional
+    public void resetPasswordAsSuperAdmin(String email) {
+        entityManager.clear();
+        String trimmedEmail = email == null ? "" : email.trim();
+        if (trimmedEmail.isEmpty()) {
+            throw new BadRequestException("Email requis.");
+        }
+
+        User user = loadUserWithoutInvalidRoles(trimmedEmail);
+        if (user == null) {
+            throw new ResourceNotFoundException("Aucun compte avec cet email.");
+        }
+
+        String temporaryPassword = generateTemporaryPassword();
+        String encodedPassword = passwordEncoder.encode(temporaryPassword);
+
+        Query updateQuery = entityManager.createNativeQuery(
+                "UPDATE users SET password = :password, must_change_password = true, updated_at = :updatedAt " +
+                "WHERE id = :userId AND deleted_at IS NULL"
+        );
+        updateQuery.setParameter("password", encodedPassword);
+        updateQuery.setParameter("updatedAt", Timestamp.valueOf(LocalDateTime.now()));
+        updateQuery.setParameter("userId", user.getId());
+        int updated = updateQuery.executeUpdate();
+        if (updated == 0) {
+            throw new ResourceNotFoundException("Utilisateur", user.getId());
+        }
+
+        boolean isOwner = user.getRoles() != null && user.getRoles().stream()
+                .anyMatch(r -> r.getType() == RoleType.BUSINESS_OWNER);
+        sendTemporaryPasswordEmail(user.getEmail(), temporaryPassword, isOwner);
+
+        log.info("Mot de passe réinitialisé par SUPER_ADMIN pour l'utilisateur: {}", user.getEmail());
+    }
+
+    /**
      * Met à jour le statut d'activation d'un compte utilisateur.
      * Méthode centralisée pour éviter la duplication de code.
      */
