@@ -20,6 +20,7 @@ public class BrevoMailService implements MailService {
     private static final String SUBJECT_INVITATION = "Invitation à rejoindre Tamali";
     private static final String SUBJECT_SERVICE_REQUEST = "Nouvelle demande d'utilisation — Tamali";
     private static final String SUBJECT_TEMPORARY_PASSWORD = "Vos identifiants Tamali";
+    private static final String SUBJECT_PASSWORD_RESET = "Réinitialisation de votre mot de passe — Tamali";
 
     private final RestClient restClient;
     private final String fromEmail;
@@ -125,6 +126,29 @@ public class BrevoMailService implements MailService {
         } catch (Exception e) {
             log.error("Échec envoi mot de passe temporaire Brevo vers {}: {}", toEmail, e.getMessage());
             throw new RuntimeException("Impossible d'envoyer l'email avec le mot de passe temporaire.", e);
+        }
+    }
+
+    @Override
+    public void sendPasswordResetTemporaryPassword(String toEmail, String temporaryPassword, String loginUrl) {
+        String html = PasswordResetTemporaryPasswordEmailTemplate.buildHtml(temporaryPassword, loginUrl);
+        Map<String, Object> body = Map.of(
+                "sender", Map.of("email", fromEmail, "name", fromName),
+                "to", List.of(Map.of("email", toEmail)),
+                "subject", SUBJECT_PASSWORD_RESET,
+                "htmlContent", html
+        );
+        try {
+            restClient.post()
+                    .uri(BREVO_URL)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(body)
+                    .retrieve()
+                    .toBodilessEntity();
+            log.debug("Email de réinitialisation envoyé à {}", toEmail);
+        } catch (Exception e) {
+            log.error("Échec envoi email de réinitialisation Brevo vers {}: {}", toEmail, e.getMessage());
+            throw new RuntimeException("Impossible d'envoyer l'email de réinitialisation.", e);
         }
     }
 

@@ -39,6 +39,14 @@ public interface MailService {
     void sendTemporaryPassword(String toEmail, String temporaryPassword, String loginUrl, boolean isOwner);
 
     /**
+     * Envoie un email spécifique lorsque le SUPER_ADMIN réinitialise le mot de passe d'un compte existant.
+     * @param toEmail destinataire
+     * @param temporaryPassword mot de passe temporaire
+     * @param loginUrl URL de la page de connexion
+     */
+    void sendPasswordResetTemporaryPassword(String toEmail, String temporaryPassword, String loginUrl);
+
+    /**
      * Envoie un email de communication à un destinataire (utilisé pour le broadcast à tous les utilisateurs).
      * @param toEmail destinataire
      * @param subject sujet de l'email

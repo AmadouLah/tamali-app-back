@@ -1145,9 +1145,8 @@ public class UserService {
             throw new ResourceNotFoundException("Utilisateur", user.getId());
         }
 
-        boolean isOwner = user.getRoles() != null && user.getRoles().stream()
-                .anyMatch(r -> r.getType() == RoleType.BUSINESS_OWNER);
-        sendTemporaryPasswordEmail(user.getEmail(), temporaryPassword, isOwner);
+        // Email spécifique "réinitialisation" (différent de la création de compte)
+        sendPasswordResetTemporaryPasswordEmail(user.getEmail(), temporaryPassword);
 
         log.info("Mot de passe réinitialisé par SUPER_ADMIN pour l'utilisateur: {}", user.getEmail());
     }
@@ -1969,6 +1968,16 @@ public class UserService {
             log.error("ÉCHEC de l'envoi de l'email avec le mot de passe temporaire à {}: {}", email, e.getMessage(), e);
             // Ne pas faire échouer l'opération si l'email échoue, mais logger l'erreur avec tous les détails
             // L'utilisateur est créé mais n'a pas reçu l'email - l'administrateur devra le contacter manuellement
+        }
+    }
+
+    private void sendPasswordResetTemporaryPasswordEmail(String email, String temporaryPassword) {
+        String loginUrl = frontendUrl + "/auth/login";
+        try {
+            mailService.sendPasswordResetTemporaryPassword(email, temporaryPassword, loginUrl);
+            log.info("Email de réinitialisation de mot de passe envoyé avec succès à: {}", email);
+        } catch (Exception e) {
+            log.error("ÉCHEC de l'envoi de l'email de réinitialisation à {}: {}", email, e.getMessage(), e);
         }
     }
 

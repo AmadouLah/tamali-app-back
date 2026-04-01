@@ -30,6 +30,11 @@ public class LogOnlyMailService implements MailService {
     }
 
     @Override
+    public void sendPasswordResetTemporaryPassword(String toEmail, String temporaryPassword, String loginUrl) {
+        log.info("[MAIL] Réinitialisation mot de passe pour {} : {} - Lien: {}", toEmail, temporaryPassword, loginUrl);
+    }
+
+    @Override
     public void sendBroadcastEmail(String toEmail, String subject, String htmlBody) {
         log.info("[MAIL] Broadcast vers {} : sujet=\"{}\"", toEmail, subject);
     }
