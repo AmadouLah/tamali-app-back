@@ -17,7 +17,6 @@ import jakarta.persistence.Query;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.domain.Sort;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -26,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.security.SecureRandom;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -62,25 +62,48 @@ public class UserService {
         return userRepository.findById(id).map(mapper::toDto).orElse(null);
     }
 
+    /**
+     * Liste légère pour ciblage des notifications (SQL natif : évite les problèmes de tri / graphe JPA
+     * sur User + rôles EAGER avec {@code @SQLRestriction}, qui peuvent provoquer une 500 en prod).
+     */
     @Transactional(readOnly = true)
+    @SuppressWarnings("unchecked")
     public List<NotificationUserOptionDto> findAllForNotificationOptions() {
-        return userRepository.findAll(Sort.by(Sort.Direction.ASC, "email")).stream()
-                .map(this::toNotificationUserOption)
-                .toList();
+        Query q = entityManager.createNativeQuery("""
+                SELECT u.id, u.email, u.firstname, u.lastname,
+                       (SELECT r.name FROM user_roles ur
+                        INNER JOIN roles r ON r.id = ur.role_id
+                        WHERE ur.user_id = u.id AND r.deleted_at IS NULL
+                        LIMIT 1)
+                FROM users u
+                WHERE u.deleted_at IS NULL
+                ORDER BY u.email
+                """);
+        List<Object[]> rows = q.getResultList();
+        List<NotificationUserOptionDto> out = new ArrayList<>(rows.size());
+        for (Object[] row : rows) {
+            UUID id = toUuid(row[0]);
+            String email = row[1] != null ? row[1].toString() : "";
+            String fn = row[2] != null ? row[2].toString() : "";
+            String ln = row[3] != null ? row[3].toString() : "";
+            String roleType = row[4] != null ? row[4].toString() : "";
+            String display = (fn + " " + ln).trim();
+            if (display.isEmpty()) {
+                display = email;
+            }
+            out.add(new NotificationUserOptionDto(id, email, display, roleType));
+        }
+        return out;
     }
 
-    private NotificationUserOptionDto toNotificationUserOption(User u) {
-        String roleType = "";
-        if (u.getRoles() != null && !u.getRoles().isEmpty()) {
-            roleType = u.getRoles().iterator().next().getType().name();
+    private static UUID toUuid(Object raw) {
+        if (raw instanceof UUID u) {
+            return u;
         }
-        String fn = u.getFirstname() != null ? u.getFirstname() : "";
-        String ln = u.getLastname() != null ? u.getLastname() : "";
-        String display = (fn + " " + ln).trim();
-        if (display.isEmpty()) {
-            display = u.getEmail();
+        if (raw instanceof String s) {
+            return UUID.fromString(s);
         }
-        return new NotificationUserOptionDto(u.getId(), u.getEmail(), display, roleType);
+        return UUID.fromString(raw.toString());
     }
 
     /**
