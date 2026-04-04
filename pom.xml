@@ -70,6 +70,12 @@
 			<artifactId>web-push</artifactId>
 			<version>5.1.2</version>
 		</dependency>
+		<!-- web-push charge EC côté BouncyCastle ; sans ce JAR le fat-jar Render lève NoClassDefFoundError: ECParameterSpec -->
+		<dependency>
+			<groupId>org.bouncycastle</groupId>
+			<artifactId>bcprov-jdk18on</artifactId>
+			<version>1.79</version>
+		</dependency>
 		<!-- Même version que web-push : scope compile pour que l'IDE résolve org.asynchttpclient.Response -->
 		<dependency>
 			<groupId>org.asynchttpclient</groupId>
