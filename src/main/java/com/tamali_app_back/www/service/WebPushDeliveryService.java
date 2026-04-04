@@ -23,9 +23,11 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class WebPushDeliveryService {
 
+    /** Instance locale : Spring Boot 4 n’expose pas toujours un bean {@link ObjectMapper}. */
+    private static final ObjectMapper PUSH_JSON = new ObjectMapper();
+
     private final WebPushProperties webPushProperties;
     private final UserPushSubscriptionRepository subscriptionRepository;
-    private final ObjectMapper objectMapper;
 
     @Value("${app.frontend-url:https://tamali.vercel.app/}")
     private String frontendUrl;
@@ -111,14 +113,14 @@ public class WebPushDeliveryService {
         String base = frontendUrl.endsWith("/") ? frontendUrl.substring(0, frontendUrl.length() - 1) : frontendUrl;
         String icon = base + "/favicon.ico";
 
-        ObjectNode notification = objectMapper.createObjectNode();
+        ObjectNode notification = PUSH_JSON.createObjectNode();
         notification.put("title", "Tamali");
         notification.put("body", message);
         notification.put("icon", icon);
 
-        ObjectNode root = objectMapper.createObjectNode();
+        ObjectNode root = PUSH_JSON.createObjectNode();
         root.set("notification", notification);
-        return objectMapper.writeValueAsBytes(root);
+        return PUSH_JSON.writeValueAsBytes(root);
     }
 
     private static String shortened(String endpoint) {
