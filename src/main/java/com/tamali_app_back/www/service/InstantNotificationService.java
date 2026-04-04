@@ -78,8 +78,8 @@ public class InstantNotificationService {
                 subscribers.remove(sub);
             }
         }
-        WebPushDeliveryService.WebPushSendStats pushStats = webPushDeliveryService.deliver(request, message, notificationId);
-        return new InstantNotificationSendResultDto(sseSent, pushStats.targets(), pushStats.delivered());
+        WebPushDeliveryService.WebPushDeliveryResult push = webPushDeliveryService.deliver(request, message, notificationId);
+        return new InstantNotificationSendResultDto(sseSent, push.targets(), push.delivered(), push.configured());
     }
 
     private static void validateScope(InstantNotificationRequest request) {

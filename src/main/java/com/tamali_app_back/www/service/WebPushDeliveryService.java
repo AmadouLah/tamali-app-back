@@ -34,25 +34,25 @@ public class WebPushDeliveryService {
 
     private volatile PushAsyncService pushAsyncService;
 
-    public WebPushSendStats deliver(InstantNotificationRequest request, String message, String notificationId) {
+    public WebPushDeliveryResult deliver(InstantNotificationRequest request, String message, String notificationId) {
         if (!webPushProperties.isConfigured()) {
-            log.debug("Web Push : clés VAPID absentes, envoi ignoré.");
-            return new WebPushSendStats(0, 0);
+            log.warn("Web Push : clés VAPID absentes — définissez WEBPUSH_VAPID_PUBLIC_KEY et WEBPUSH_VAPID_PRIVATE_KEY.");
+            return new WebPushDeliveryResult(0, 0, false);
         }
         PushAsyncService service;
         try {
             service = getOrCreatePushAsyncService();
         } catch (GeneralSecurityException e) {
             log.warn("Web Push : initialisation PushAsyncService impossible.", e);
-            return new WebPushSendStats(0, 0);
+            return new WebPushDeliveryResult(0, 0, true);
         }
         if (service == null) {
-            return new WebPushSendStats(0, 0);
+            return new WebPushDeliveryResult(0, 0, true);
         }
 
         List<UserPushSubscription> targets = resolveTargets(request);
         if (targets.isEmpty()) {
-            return new WebPushSendStats(0, 0);
+            return new WebPushDeliveryResult(0, 0, true);
         }
 
         byte[] payload;
@@ -60,7 +60,7 @@ public class WebPushDeliveryService {
             payload = buildAngularPushPayload(message, notificationId);
         } catch (Exception e) {
             log.warn("Web Push : sérialisation du corps impossible.", e);
-            return new WebPushSendStats(targets.size(), 0);
+            return new WebPushDeliveryResult(targets.size(), 0, true);
         }
 
         int delivered = 0;
@@ -84,7 +84,7 @@ public class WebPushDeliveryService {
                 log.debug("Web Push : échec pour …{} — {}", shortened(sub.getEndpoint()), e.getMessage());
             }
         }
-        return new WebPushSendStats(targets.size(), delivered);
+        return new WebPushDeliveryResult(targets.size(), delivered, true);
     }
 
     private PushAsyncService getOrCreatePushAsyncService() throws GeneralSecurityException {
@@ -133,6 +133,6 @@ public class WebPushDeliveryService {
         return endpoint.length() > 48 ? endpoint.substring(endpoint.length() - 48) : endpoint;
     }
 
-    public record WebPushSendStats(int targets, int delivered) {
+    public record WebPushDeliveryResult(int targets, int delivered, boolean configured) {
     }
 }
