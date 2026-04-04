@@ -1,6 +1,7 @@
 package com.tamali_app_back.www.service;
 
 import com.tamali_app_back.www.dto.EmailCheckResponse;
+import com.tamali_app_back.www.dto.NotificationUserOptionDto;
 import com.tamali_app_back.www.dto.UserDto;
 import com.tamali_app_back.www.entity.Business;
 import com.tamali_app_back.www.entity.Role;
@@ -16,6 +17,7 @@ import jakarta.persistence.Query;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -58,6 +60,27 @@ public class UserService {
     @Transactional(readOnly = true)
     public UserDto getById(UUID id) {
         return userRepository.findById(id).map(mapper::toDto).orElse(null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<NotificationUserOptionDto> findAllForNotificationOptions() {
+        return userRepository.findAll(Sort.by(Sort.Direction.ASC, "email")).stream()
+                .map(this::toNotificationUserOption)
+                .toList();
+    }
+
+    private NotificationUserOptionDto toNotificationUserOption(User u) {
+        String roleType = "";
+        if (u.getRoles() != null && !u.getRoles().isEmpty()) {
+            roleType = u.getRoles().iterator().next().getType().name();
+        }
+        String fn = u.getFirstname() != null ? u.getFirstname() : "";
+        String ln = u.getLastname() != null ? u.getLastname() : "";
+        String display = (fn + " " + ln).trim();
+        if (display.isEmpty()) {
+            display = u.getEmail();
+        }
+        return new NotificationUserOptionDto(u.getId(), u.getEmail(), display, roleType);
     }
 
     /**

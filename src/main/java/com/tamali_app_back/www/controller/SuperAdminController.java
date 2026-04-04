@@ -2,12 +2,16 @@ package com.tamali_app_back.www.controller;
 
 import com.tamali_app_back.www.dto.AnnouncementDto;
 import com.tamali_app_back.www.dto.BusinessSummaryDto;
+import com.tamali_app_back.www.dto.InstantNotificationSendResultDto;
+import com.tamali_app_back.www.dto.NotificationUserOptionDto;
 import com.tamali_app_back.www.dto.SuperAdminDashboardDto;
 import com.tamali_app_back.www.dto.request.AnnouncementRequest;
 import com.tamali_app_back.www.dto.request.BroadcastEmailRequest;
+import com.tamali_app_back.www.dto.request.InstantNotificationRequest;
 import com.tamali_app_back.www.dto.request.SuperAdminResetPasswordRequest;
 import com.tamali_app_back.www.enums.RoleType;
 import com.tamali_app_back.www.service.AnnouncementService;
+import com.tamali_app_back.www.service.InstantNotificationService;
 import com.tamali_app_back.www.service.SuperAdminService;
 import com.tamali_app_back.www.service.UserService;
 import com.tamali_app_back.www.exception.BadRequestException;
@@ -26,6 +30,7 @@ public class SuperAdminController {
     private final SuperAdminService superAdminService;
     private final AnnouncementService announcementService;
     private final UserService userService;
+    private final InstantNotificationService instantNotificationService;
 
     @GetMapping("/dashboard")
     public ResponseEntity<SuperAdminDashboardDto> getDashboard() {
@@ -57,6 +62,22 @@ public class SuperAdminController {
     public ResponseEntity<Void> broadcastEmail(@Valid @RequestBody BroadcastEmailRequest request) {
         announcementService.broadcastEmail(request.subject(), request.message());
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/users/notification-options")
+    public ResponseEntity<List<NotificationUserOptionDto>> notificationUserOptions(
+            @RequestHeader(value = "X-User-Role", required = false) String userRole
+    ) {
+        requireSuperAdmin(userRole);
+        return ResponseEntity.ok(userService.findAllForNotificationOptions());
+    }
+
+    @PostMapping("/notifications/instant")
+    public ResponseEntity<InstantNotificationSendResultDto> sendInstantNotification(
+            @RequestHeader(value = "X-User-Role", required = false) String userRole,
+            @Valid @RequestBody InstantNotificationRequest request
+    ) {
+        return ResponseEntity.ok(instantNotificationService.sendAsSuperAdmin(userRole, request));
     }
 
     /**
