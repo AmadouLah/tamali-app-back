@@ -63,7 +63,8 @@ public class InstantNotificationService {
         }
         validateScope(request);
 
-        InstantNotificationPayloadDto payload = new InstantNotificationPayloadDto(message, Instant.now());
+        String notificationId = UUID.randomUUID().toString();
+        InstantNotificationPayloadDto payload = new InstantNotificationPayloadDto(message, Instant.now(), notificationId);
         int sseSent = 0;
         for (Subscriber sub : subscribers) {
             if (!shouldReceive(sub, request)) {
@@ -77,7 +78,7 @@ public class InstantNotificationService {
                 subscribers.remove(sub);
             }
         }
-        WebPushDeliveryService.WebPushSendStats pushStats = webPushDeliveryService.deliver(request, message);
+        WebPushDeliveryService.WebPushSendStats pushStats = webPushDeliveryService.deliver(request, message, notificationId);
         return new InstantNotificationSendResultDto(sseSent, pushStats.targets(), pushStats.delivered());
     }
 

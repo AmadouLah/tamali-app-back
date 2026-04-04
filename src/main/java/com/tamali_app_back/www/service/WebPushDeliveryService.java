@@ -34,7 +34,7 @@ public class WebPushDeliveryService {
 
     private volatile PushAsyncService pushAsyncService;
 
-    public WebPushSendStats deliver(InstantNotificationRequest request, String message) {
+    public WebPushSendStats deliver(InstantNotificationRequest request, String message, String notificationId) {
         if (!webPushProperties.isConfigured()) {
             log.debug("Web Push : clés VAPID absentes, envoi ignoré.");
             return new WebPushSendStats(0, 0);
@@ -57,7 +57,7 @@ public class WebPushDeliveryService {
 
         byte[] payload;
         try {
-            payload = buildAngularPushPayload(message);
+            payload = buildAngularPushPayload(message, notificationId);
         } catch (Exception e) {
             log.warn("Web Push : sérialisation du corps impossible.", e);
             return new WebPushSendStats(targets.size(), 0);
@@ -109,14 +109,18 @@ public class WebPushDeliveryService {
         };
     }
 
-    private byte[] buildAngularPushPayload(String message) throws Exception {
+    private byte[] buildAngularPushPayload(String message, String notificationId) throws Exception {
         String base = frontendUrl.endsWith("/") ? frontendUrl.substring(0, frontendUrl.length() - 1) : frontendUrl;
         String icon = base + "/favicon.ico";
+        String tag = "tamali-instant-" + notificationId;
 
         ObjectNode notification = PUSH_JSON.createObjectNode();
         notification.put("title", "Tamali");
         notification.put("body", message);
         notification.put("icon", icon);
+        notification.put("tag", tag);
+        notification.put("requireInteraction", true);
+        notification.put("silent", false);
 
         ObjectNode root = PUSH_JSON.createObjectNode();
         root.set("notification", notification);
