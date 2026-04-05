@@ -73,9 +73,14 @@ public class InstantNotificationService {
             try {
                 sub.emitter().send(SseEmitter.event().data(payload, MediaType.APPLICATION_JSON));
                 sseSent++;
-            } catch (Exception e) {
-                log.debug("Échec envoi SSE, retrait abonné: {}", e.getMessage());
+            } catch (Throwable t) {
+                try {
+                    sub.emitter().complete();
+                } catch (Throwable ignored) {
+                    /* connexion déjà fermée */
+                }
                 subscribers.remove(sub);
+                log.debug("Échec envoi SSE (client déconnecté ou flux fermé), abonné retiré: {}", t.getMessage());
             }
         }
         WebPushDeliveryService.WebPushDeliveryResult push = webPushDeliveryService.deliver(request, message, notificationId);
