@@ -5,6 +5,7 @@ import com.tamali_app_back.www.dto.InstantNotificationSendResultDto;
 import com.tamali_app_back.www.dto.request.InstantNotificationRequest;
 import com.tamali_app_back.www.enums.RoleType;
 import com.tamali_app_back.www.exception.BadRequestException;
+import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -16,6 +17,9 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Hub SSE en mémoire + délégation Web Push pour les appareils abonnés (app fermée possible).
@@ -26,9 +30,16 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public class InstantNotificationService {
 
     private static final int MAX_MESSAGE_LENGTH = 2000;
+    private static final int SSE_KEEPALIVE_SECONDS = 25;
 
     private final List<Subscriber> subscribers = new CopyOnWriteArrayList<>();
     private final WebPushDeliveryService webPushDeliveryService;
+    private final ScheduledExecutorService sseKeepAliveScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "tamali-sse-keepalive");
+        t.setDaemon(true);
+        return t;
+    });
+    private volatile boolean keepAliveTaskStarted;
 
     public SseEmitter subscribe(UUID userId, String primaryRole) {
         if (userId == null) {
@@ -47,7 +58,46 @@ public class InstantNotificationService {
             subscribers.remove(sub);
             throw new BadRequestException("Impossible d'ouvrir le flux de notifications.");
         }
+        startKeepAliveIfNeeded();
         return emitter;
+    }
+
+    @PreDestroy
+    public void shutdownSseKeepAlive() {
+        sseKeepAliveScheduler.shutdown();
+    }
+
+    private void startKeepAliveIfNeeded() {
+        if (keepAliveTaskStarted) {
+            return;
+        }
+        synchronized (this) {
+            if (keepAliveTaskStarted) {
+                return;
+            }
+            sseKeepAliveScheduler.scheduleAtFixedRate(this::broadcastKeepAlive, SSE_KEEPALIVE_SECONDS, SSE_KEEPALIVE_SECONDS,
+                    TimeUnit.SECONDS);
+            keepAliveTaskStarted = true;
+        }
+    }
+
+    private void broadcastKeepAlive() {
+        if (subscribers.isEmpty()) {
+            return;
+        }
+        for (Subscriber s : subscribers) {
+            try {
+                s.emitter().send(SseEmitter.event().comment("keep-alive"));
+            } catch (Throwable t) {
+                subscribers.remove(s);
+                try {
+                    s.emitter().complete();
+                } catch (Throwable ignored) {
+                    /* flux déjà fermé */
+                }
+                log.debug("SSE keep-alive échoué, abonné retiré: {}", t.getMessage());
+            }
+        }
     }
 
     public InstantNotificationSendResultDto sendAsSuperAdmin(String callerRole, InstantNotificationRequest request) {

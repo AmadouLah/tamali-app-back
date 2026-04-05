@@ -101,6 +101,12 @@ public class CustomCorsFilter extends OncePerRequestFilter {
             log.debug("En-têtes CORS ajoutés pour requête {} - Origin: {}", request.getMethod(), responseOrigin);
         }
         
+        // SSE : éviter la mise en buffer agressive des proxys (sinon net::ERR_FAILED / coupures).
+        if (request.getRequestURI() != null && request.getRequestURI().contains("/notifications/stream")) {
+            response.setHeader("Cache-Control", "no-cache, no-transform");
+            response.setHeader("X-Accel-Buffering", "no");
+        }
+
         // Continuer avec la chaîne de filtres pour les autres requêtes
         filterChain.doFilter(request, response);
     }
