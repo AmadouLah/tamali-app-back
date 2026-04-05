@@ -56,5 +56,9 @@ public class User extends SyncableEntity {
     
     @Column(name = "must_change_password")
     @Builder.Default
-    private boolean mustChangePassword = false;
+    private Boolean mustChangePassword = Boolean.FALSE;
+
+    public boolean isMustChangePassword() {
+        return Boolean.TRUE.equals(mustChangePassword);
+    }
 }
